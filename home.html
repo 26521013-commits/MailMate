@@ -11,7 +11,6 @@
       <header>
         <div class="header-top">
           <h1>MailMate 📧</h1>
-          <!-- Nút chuyển đổi Sáng / Tối -->
           <button id="theme-toggle" class="btn outline">🌙 Chế độ Đêm</button>
         </div>
         <p>Trợ lý hỗ trợ soạn thư thông minh cho sinh viên & người đi làm</p>
@@ -22,10 +21,11 @@
         <section class="input-section">
           <h2>Thông tin & Cấu hình</h2>
 
-          <!-- Các ô nhập thông tin cá nhân mới thêm -->
           <div class="form-row">
             <div class="form-group">
-              <label for="student-name">Họ và tên:</label>
+              <label for="student-name"
+                >Họ và tên <span class="required">(*)</span>:</label
+              >
               <input
                 type="text"
                 id="student-name"
@@ -33,14 +33,41 @@
               />
             </div>
             <div class="form-group">
-              <label for="student-class">Lớp học:</label>
+              <label for="student-class"
+                >Lớp học <span class="required">(*)</span>:</label
+              >
               <input type="text" id="student-class" placeholder="VD: 12C3" />
             </div>
           </div>
 
           <div class="form-group">
-            <label for="student-id">Mã số (MSSV):</label>
+            <label for="student-id"
+              >Mã số (MSSV) <span class="required">(*)</span>:</label
+            >
             <input type="text" id="student-id" placeholder="VD: 26521013" />
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="teacher-name"
+                >Tên Giảng viên <span class="required">(*)</span>:</label
+              >
+              <input
+                type="text"
+                id="teacher-name"
+                placeholder="VD: Cô Lê Hằng"
+              />
+            </div>
+            <div class="form-group">
+              <label for="recipient-email"
+                >Email gửi đến <span class="required">(*)</span>:</label
+              >
+              <input
+                type="email"
+                id="recipient-email"
+                placeholder="VD: gvien@truong.edu.vn"
+              />
+            </div>
           </div>
 
           <div class="form-group">
@@ -72,16 +99,16 @@
 
           <div class="form-group flex-grow">
             <label for="prompt"
-              >Lý do chi tiết (giảng viên, ngày tháng...):</label
+              >Lý do chi tiết <span class="required">(*)</span>:</label
             >
             <textarea
               id="prompt"
-              placeholder="VD: Em bị sốt, xin nghỉ môn Toán..."
+              placeholder="VD: Em bị sốt cấp tính, không thể di chuyển..."
             ></textarea>
           </div>
 
           <button id="generate-btn" class="btn primary">
-            ✨ Tạo Email Ngay
+            ✨ AI Soạn Email Ngay
           </button>
         </section>
 

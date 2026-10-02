@@ -223,3 +223,8 @@ textarea:focus {
   background-color: var(--border-color);
   color: white;
 }
+/* Màu đỏ cho dấu (*) bắt buộc */
+.required {
+  color: #ff4757;
+  font-weight: bold;
+}
