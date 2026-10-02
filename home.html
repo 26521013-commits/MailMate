@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MailMate - Trợ Lý Soạn Thư AI</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div class="container">
+      <header>
+        <div class="header-top">
+          <h1>MailMate 📧</h1>
+          <!-- Nút chuyển đổi Sáng / Tối -->
+          <button id="theme-toggle" class="btn outline">🌙 Chế độ Đêm</button>
+        </div>
+        <p>Trợ lý hỗ trợ soạn thư thông minh cho sinh viên & người đi làm</p>
+      </header>
+
+      <main class="workspace">
+        <!-- Cột trái -->
+        <section class="input-section">
+          <h2>Thông tin & Cấu hình</h2>
+
+          <!-- Các ô nhập thông tin cá nhân mới thêm -->
+          <div class="form-row">
+            <div class="form-group">
+              <label for="student-name">Họ và tên:</label>
+              <input
+                type="text"
+                id="student-name"
+                placeholder="VD: Nguyễn Văn A"
+              />
+            </div>
+            <div class="form-group">
+              <label for="student-class">Lớp học:</label>
+              <input type="text" id="student-class" placeholder="VD: 12C3" />
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="student-id">Mã số (MSSV):</label>
+            <input type="text" id="student-id" placeholder="VD: 26521013" />
+          </div>
+
+          <div class="form-group">
+            <label for="topic">Chủ đề email:</label>
+            <select id="topic">
+              <option value="nghi-hoc">Xin nghỉ học / nghỉ làm</option>
+              <option value="nop-tre">Xin nộp bài trễ</option>
+              <option value="ung-tuyen">Ứng tuyển / Xin thực tập</option>
+            </select>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="ai-model">Mô hình AI:</label>
+              <select id="ai-model">
+                <option value="gemini">Google Gemini</option>
+                <option value="gpt">ChatGPT</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="language">Ngôn ngữ:</label>
+              <select id="language">
+                <option value="vi">Tiếng Việt</option>
+                <option value="en">Tiếng Anh</option>
+                <option value="ja">Tiếng Nhật</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-group flex-grow">
+            <label for="prompt"
+              >Lý do chi tiết (giảng viên, ngày tháng...):</label
+            >
+            <textarea
+              id="prompt"
+              placeholder="VD: Em bị sốt, xin nghỉ môn Toán..."
+            ></textarea>
+          </div>
+
+          <button id="generate-btn" class="btn primary">
+            ✨ Tạo Email Ngay
+          </button>
+        </section>
+
+        <!-- Cột phải -->
+        <section class="output-section">
+          <h2>Nội dung Email</h2>
+
+          <div class="form-group">
+            <label for="email-subject">Tiêu đề (Subject):</label>
+            <input
+              type="text"
+              id="email-subject"
+              placeholder="Tiêu đề thư..."
+            />
+          </div>
+
+          <div class="form-group flex-grow">
+            <label for="email-body">Nội dung (Body):</label>
+            <textarea
+              id="email-body"
+              placeholder="Nội dung tạo bởi AI sẽ xuất hiện ở đây..."
+            ></textarea>
+          </div>
+
+          <div class="action-buttons">
+            <button id="copy-btn" class="btn secondary">📋 Sao chép</button>
+            <button id="save-draft-btn" class="btn secondary">
+              💾 Lưu nháp
+            </button>
+            <button id="send-direct-btn" class="btn success">
+              🚀 Gửi (Gmail)
+            </button>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="script.js"></script>
+  </body>
+</html>
