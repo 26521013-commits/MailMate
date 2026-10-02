@@ -1,155 +1,257 @@
 <!doctype html>
 <html lang="vi">
   <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>MailMate - Trợ Lý Soạn Thư AI</title>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <title>MailMate – Soạn email hoàn chỉnh</title>
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;700&family=Newsreader:wght@400;600&display=swap"
+    />
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
-    <div class="container">
-      <header>
-        <div class="header-top">
-          <h1>MailMate 📧</h1>
-          <button id="theme-toggle" class="btn outline">🌙 Chế độ Đêm</button>
+    <div id="deco" aria-hidden="true"></div>
+
+    <!-- Hiệu ứng Bot chào mừng -->
+    <div id="hello" role="dialog" aria-label="Chào mừng" tabindex="-1">
+      <div class="card">
+        <div class="bot" aria-hidden="true">
+          <i></i><i></i><u></u><u></u><b></b>
         </div>
-        <p>Trợ lý hỗ trợ soạn thư thông minh cho sinh viên & người đi làm</p>
-      </header>
+        <h2>Chào bạn, mình là MailMate ✨</h2>
+        <p>
+          Mình là người trợ lý thân thiết của bạn.<br />Hôm nay mình có thể giúp
+          gì cho bạn đây?
+        </p>
+        <button class="btn main" id="hi" style="margin-top: 0">
+          Bắt đầu soạn thư
+        </button>
+      </div>
+    </div>
 
-      <main class="workspace">
-        <!-- Cột trái -->
-        <section class="input-section">
-          <h2>Thông tin & Cấu hình</h2>
+    <div class="wrap">
+      <!-- Bảng chọn màu và Chế độ Sáng/Tối (Góc trái) -->
+      <div
+        class="theme"
+        id="theme"
+        role="group"
+        aria-label="Tùy chỉnh giao diện"
+      >
+        <button
+          class="btn"
+          id="theme-toggle"
+          style="padding: 4px 10px; font-weight: bold"
+        ></button>
+        <div
+          style="
+            width: 1px;
+            height: 20px;
+            background: var(--line);
+            margin: 0 4px;
+          "
+        ></div>
+        <span>Màu:</span>
+        <span id="sws" style="display: contents"></span>
+        <button class="btn" id="rst">Mặc định</button>
+      </div>
 
-          <div class="form-row">
-            <div class="form-group">
-              <label for="student-name"
-                >Họ và tên <span class="required">(*)</span>:</label
-              >
-              <input
-                type="text"
-                id="student-name"
-                placeholder="VD: Nguyễn Văn A"
-              />
-              <small class="error-text" id="err-student-name"></small>
-            </div>
-            <div class="form-group">
-              <label for="student-class"
-                >Lớp học <span class="required">(*)</span>:</label
-              >
-              <input type="text" id="student-class" placeholder="VD: 12C3" />
-              <small class="error-text" id="err-student-class"></small>
+      <h1>MailMate <span class="tw" aria-hidden="true">✦</span></h1>
+      <p class="sub">
+        Hôm nay mình có thể giúp gì cho bạn? Điền thông tin bên dưới hoặc tham
+        khảo diễn đàn, mình sẽ soạn email hoàn chỉnh để bạn gửi.
+      </p>
+
+      <nav class="tabs nav" role="tablist" aria-label="Chuyển mục">
+        <button class="tab" role="tab" data-v="compose" aria-selected="true">
+          ✉️ Soạn email
+        </button>
+        <button class="tab" role="tab" data-v="forum" aria-selected="false">
+          💌 Diễn đàn mẫu
+        </button>
+      </nav>
+
+      <!-- DIỄN ĐÀN MẪU -->
+      <div id="vForum" hidden>
+        <section
+          class="panel drafts"
+          id="forum"
+          aria-label="Diễn đàn mẫu email"
+        >
+          <h2>Diễn đàn mẫu email 💌</h2>
+          <div id="fbody">
+            <div id="flist">
+              <article class="fc">
+                <div class="fh">
+                  <div>
+                    <b>Xin nghỉ ốm tiêu chuẩn</b
+                    ><small
+                      ><span class="tag">Xin nghỉ học</span>Nguyễn Minh · Hôm
+                      nay</small
+                    >
+                  </div>
+                </div>
+                <p class="pv">
+                  Kính gửi Thầy/Cô, em bị sốt cao không thể đến lớp, xin phép
+                  thầy cô cho em nghỉ buổi học hôm nay...
+                </p>
+              </article>
+              <article class="fc">
+                <div class="fh">
+                  <div>
+                    <b>Xin nộp bài tập trễ</b
+                    ><small
+                      ><span class="tag">Xin nộp trễ</span>Trần An · Hôm
+                      qua</small
+                    >
+                  </div>
+                </div>
+                <p class="pv">
+                  Kính gửi Thầy/Cô, do sự cố máy tính mất dữ liệu, em kính xin
+                  thầy cô gia hạn thêm 1 ngày để em hoàn thiện bài tập...
+                </p>
+              </article>
+              <div class="note">
+                Diễn đàn hiện đang ở chế độ xem trước (Offline).
+              </div>
             </div>
           </div>
+        </section>
+      </div>
 
-          <div class="form-group">
-            <label for="student-id"
-              >Mã số (MSSV) <span class="required">(*)</span>:</label
-            >
-            <input type="text" id="student-id" placeholder="VD: 26521013" />
-            <small class="error-text" id="err-student-id"></small>
-          </div>
+      <!-- SOẠN THƯ -->
+      <div id="vCompose">
+        <div class="grid">
+          <section class="panel" aria-label="Thông tin email">
+            <h2>Thông tin & Cấu hình</h2>
 
-          <div class="form-row">
-            <div class="form-group">
-              <label for="teacher-name"
-                >Tên Giảng viên <span class="required">(*)</span>:</label
-              >
-              <input
-                type="text"
-                id="teacher-name"
-                placeholder="VD: Cô Lê Hằng"
-              />
-              <small class="error-text" id="err-teacher-name"></small>
+            <div>
+              <label for="topic">Chủ đề email</label>
+              <select id="topic">
+                <option value="nghi-hoc">Xin nghỉ học / nghỉ làm</option>
+                <option value="nop-tre">Xin nộp bài trễ</option>
+                <option value="ung-tuyen">Ứng tuyển / Xin thực tập</option>
+                <option value="khac">Khác (Liên hệ chung)</option>
+              </select>
             </div>
-            <div class="form-group">
-              <label for="recipient-email"
-                >Email gửi đến <span class="required">(*)</span>:</label
+
+            <div class="row">
+              <div>
+                <label for="rname"
+                  >Tên Giảng viên/Người nhận
+                  <span class="required">(*)</span></label
+                >
+                <input id="rname" placeholder="VD: Cô Lê Hằng" />
+                <small class="error-text" id="err-rname"></small>
+              </div>
+              <div>
+                <label for="me"
+                  >Họ và tên của bạn <span class="required">(*)</span></label
+                >
+                <input id="me" placeholder="VD: Nguyễn Văn A" />
+                <small class="error-text" id="err-me"></small>
+              </div>
+            </div>
+
+            <div>
+              <label for="rto"
+                >Email người nhận <span class="required">(*)</span></label
               >
               <input
+                id="rto"
                 type="email"
-                id="recipient-email"
-                placeholder="VD: gvien@truong.edu.vn"
+                placeholder="gvien@truong.edu.vn"
+                autocomplete="off"
               />
-              <small class="error-text" id="err-recipient-email"></small>
+              <small class="error-text" id="err-rto"></small>
             </div>
-          </div>
 
-          <div class="form-group">
-            <label for="topic">Chủ đề email:</label>
-            <select id="topic">
-              <option value="nghi-hoc">Xin nghỉ học / nghỉ làm</option>
-              <option value="nop-tre">Xin nộp bài trễ</option>
-              <option value="ung-tuyen">Ứng tuyển / Xin thực tập</option>
-            </select>
-          </div>
-
-          <div class="form-row">
-            <div class="form-group">
-              <label for="ai-model">Mô hình AI:</label>
-              <select id="ai-model">
-                <option value="gemini">Google Gemini</option>
-                <option value="gpt">ChatGPT</option>
-              </select>
+            <div class="row">
+              <div>
+                <label for="sid"
+                  >Mã số sinh viên <span class="required">(*)</span></label
+                >
+                <input
+                  id="sid"
+                  placeholder="VD: 21110123"
+                  inputmode="numeric"
+                />
+                <small class="error-text" id="err-sid"></small>
+              </div>
+              <div>
+                <label for="maj"
+                  >Lớp / Ngành <span class="required">(*)</span></label
+                >
+                <input id="maj" placeholder="VD: 12C3 / CNTT" />
+                <small class="error-text" id="err-maj"></small>
+              </div>
             </div>
-            <div class="form-group">
-              <label for="language">Ngôn ngữ:</label>
-              <select id="language">
-                <option value="vi">Tiếng Việt</option>
-                <option value="en">Tiếng Anh</option>
-                <option value="ja">Tiếng Nhật</option>
-              </select>
-            </div>
-          </div>
 
-          <div class="form-group flex-grow">
-            <label for="prompt"
-              >Lý do chi tiết <span class="required">(*)</span>:</label
+            <div class="note" style="margin-top: 0">
+              Trình duyệt sẽ tự động nhớ thông tin của bạn cho lần sau.
+            </div>
+
+            <label for="pts"
+              >Lý do chi tiết <span class="required">(*)</span></label
             >
             <textarea
-              id="prompt"
-              placeholder="VD: Em bị sốt cấp tính, không thể di chuyển..."
+              id="pts"
+              placeholder="VD: Em bị sốt cấp tính từ đêm qua, không thể đi học được..."
             ></textarea>
-            <small class="error-text" id="err-prompt"></small>
-          </div>
+            <small class="error-text" id="err-pts"></small>
 
-          <button id="generate-btn" class="btn primary">
-            ✨ AI Soạn Email Ngay
-          </button>
+            <label for="lang">Ngôn ngữ đích</label>
+            <select id="lang">
+              <option value="vi">Tiếng Việt</option>
+              <option value="en">Tiếng Anh</option>
+              <option value="ja">Tiếng Nhật</option>
+            </select>
+
+            <button class="btn main" id="go">✨ AI Soạn Email Ngay</button>
+          </section>
+
+          <section class="letter mail" aria-label="Email đã soạn">
+            <div id="empty" class="empty">
+              Email của bạn sẽ hiện ở đây. Bạn có thể sửa trực tiếp.
+            </div>
+            <div id="out" hidden>
+              <label for="to">Đến (email)</label>
+              <input id="to" type="email" />
+              <label for="subj">Tiêu đề</label>
+              <input id="subj" class="subj" />
+              <label for="body">Nội dung</label>
+              <textarea id="body"></textarea>
+
+              <div class="bar">
+                <button class="btn" id="copy">📋 Sao chép</button>
+                <button class="btn" id="save">💾 Lưu nháp</button>
+                <a
+                  class="btn"
+                  id="gm"
+                  target="_blank"
+                  rel="noopener"
+                  style="
+                    background: var(--acc);
+                    border-color: var(--acc);
+                    color: var(--onacc);
+                  "
+                  >🚀 Gửi qua Gmail ➜</a
+                >
+              </div>
+
+              <div class="note" style="margin-top: 15px" id="msg"></div>
+            </div>
+          </section>
+        </div>
+
+        <section class="panel drafts" aria-label="Nháp">
+          <h2>Nháp chưa gửi</h2>
+          <div id="dl"><div class="note">Chưa có nháp nào.</div></div>
         </section>
-
-        <!-- Cột phải -->
-        <section class="output-section">
-          <h2>Nội dung Email</h2>
-
-          <div class="form-group">
-            <label for="email-subject">Tiêu đề (Subject):</label>
-            <input
-              type="text"
-              id="email-subject"
-              placeholder="Tiêu đề thư..."
-            />
-          </div>
-
-          <div class="form-group flex-grow">
-            <label for="email-body">Nội dung (Body):</label>
-            <textarea
-              id="email-body"
-              placeholder="Nội dung tạo bởi AI sẽ xuất hiện ở đây..."
-            ></textarea>
-          </div>
-
-          <div class="action-buttons">
-            <button id="copy-btn" class="btn secondary">📋 Sao chép</button>
-            <button id="save-draft-btn" class="btn secondary">
-              💾 Lưu nháp
-            </button>
-            <button id="send-direct-btn" class="btn success">
-              🚀 Gửi (Gmail)
-            </button>
-          </div>
-        </section>
-      </main>
+      </div>
     </div>
 
     <script src="script.js"></script>
