@@ -17,10 +17,9 @@ function removeVietnameseTones(str) {
   return str;
 }
 
-// HÀM DỊCH NGÔN NGỮ TỰ ĐỘNG (Dùng API miễn phí MyMemory)
+// HÀM DỊCH NGÔN NGỮ TỰ ĐỘNG
 async function translateText(text, targetLang) {
-  if (targetLang === "vi") return text; // Tiếng Việt thì giữ nguyên
-
+  if (targetLang === "vi") return text;
   try {
     const response = await fetch(
       `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=vi|${targetLang}`,
@@ -28,9 +27,29 @@ async function translateText(text, targetLang) {
     const data = await response.json();
     return data.responseData.translatedText;
   } catch (error) {
-    console.error("Lỗi API Dịch:", error);
-    return text + " (Lỗi dịch tự động, vui lòng tự dịch đoạn này)";
+    return text + " (Lỗi dịch tự động)";
   }
+}
+
+// --- CÁC HÀM HIỂN THỊ LỖI (MỚI THÊM) ---
+function showError(inputId, message) {
+  const inputEl = document.getElementById(inputId);
+  const errorEl = document.getElementById("err-" + inputId);
+  inputEl.classList.add("input-error");
+  errorEl.innerText = message;
+  errorEl.classList.add("show");
+}
+
+function clearAllErrors() {
+  // Xóa hết viền đỏ
+  document
+    .querySelectorAll(".input-error")
+    .forEach((el) => el.classList.remove("input-error"));
+  // Ẩn hết chữ đỏ
+  document.querySelectorAll(".error-text").forEach((el) => {
+    el.classList.remove("show");
+    el.innerText = "";
+  });
 }
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -52,8 +71,11 @@ document.addEventListener("DOMContentLoaded", () => {
   const emailSubject = document.getElementById("email-subject");
   const emailBody = document.getElementById("email-body");
 
-  // Đổi thành async function để đợi AI dịch
   generateBtn.addEventListener("click", async () => {
+    // 0. Xóa tất cả cảnh báo cũ trước khi kiểm tra lại
+    clearAllErrors();
+    let hasError = false; // Cờ theo dõi lỗi
+
     const name = document.getElementById("student-name").value.trim();
     const stuClass = document.getElementById("student-class").value.trim();
     const stuId = document.getElementById("student-id").value.trim();
@@ -62,28 +84,61 @@ document.addEventListener("DOMContentLoaded", () => {
       .getElementById("recipient-email")
       .value.trim();
     const extraDetails = document.getElementById("prompt").value.trim();
-
     const topic = document.getElementById("topic").value;
     const lang = document.getElementById("language").value;
 
-    if (
-      !name ||
-      !stuClass ||
-      !stuId ||
-      !teacherName ||
-      !recipientEmail ||
-      !extraDetails
-    ) {
-      alert(
-        "⚠️ Lỗi: Vui lòng điền đầy đủ tất cả các thông tin có dấu (*) màu đỏ!",
-      );
-      return;
+    const invalidCharRegex = /[0-9!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]+/;
+
+    // --- 1. KIỂM TRA TỪNG Ô VÀ BÔI ĐỎ NẾU SAI ---
+    if (!name) {
+      showError("student-name", "Vui lòng nhập Họ và tên.");
+      hasError = true;
+    } else if (invalidCharRegex.test(name)) {
+      showError("student-name", "Tên không được chứa số hoặc ký tự đặc biệt.");
+      hasError = true;
     }
 
+    if (!stuClass) {
+      showError("student-class", "Vui lòng nhập Lớp học.");
+      hasError = true;
+    }
+
+    if (!stuId) {
+      showError("student-id", "Vui lòng nhập MSSV.");
+      hasError = true;
+    }
+
+    if (!teacherName) {
+      showError("teacher-name", "Vui lòng nhập Tên giảng viên.");
+      hasError = true;
+    } else if (invalidCharRegex.test(teacherName)) {
+      showError(
+        "teacher-name",
+        "Tên GV không được chứa số hoặc ký tự đặc biệt.",
+      );
+      hasError = true;
+    }
+
+    if (!recipientEmail) {
+      showError("recipient-email", "Vui lòng nhập Email.");
+      hasError = true;
+    } else if (!recipientEmail.includes("@")) {
+      showError("recipient-email", "Email bị sai định dạng (Thiếu '@').");
+      hasError = true;
+    }
+
+    if (!extraDetails) {
+      showError("prompt", "Vui lòng nhập Lý do chi tiết.");
+      hasError = true;
+    }
+
+    // Nếu có ít nhất 1 ô bị lỗi -> Chặn tiến trình tạo thư
+    if (hasError) return;
+
+    // --- NẾU TẤT CẢ ĐỀU HỢP LỆ, TIẾN HÀNH TẠO THƯ ---
     generateBtn.innerText = "⏳ AI đang dịch và tạo thư...";
     generateBtn.disabled = true;
 
-    // XỬ LÝ 1: Nếu là Tiếng Anh / Tiếng Nhật -> Xóa dấu tiếng Việt của Tên người và Tên giảng viên
     let finalName = name;
     let finalTeacher = teacherName;
     if (lang !== "vi") {
@@ -91,10 +146,8 @@ document.addEventListener("DOMContentLoaded", () => {
       finalTeacher = removeVietnameseTones(teacherName);
     }
 
-    // XỬ LÝ 2: Dịch lý do chi tiết sang ngôn ngữ đang chọn
     let finalDetails = await translateText(extraDetails, lang);
 
-    // XỬ LÝ 3: Tạo thư với thông tin đã xử lý
     if (topic === "nghi-hoc") {
       if (lang === "vi") {
         emailSubject.value = `[XIN NGHỈ HỌC] - ${finalName} - MSSV: ${stuId}`;
@@ -123,12 +176,28 @@ document.addEventListener("DOMContentLoaded", () => {
     alert("Đã sao chép vào khay nhớ tạm!");
   });
 
+  document.getElementById("save-draft-btn").addEventListener("click", () => {
+    if (!emailSubject.value.trim() && !emailBody.value.trim()) {
+      return alert(
+        "⚠️ Thư đang trống! Vui lòng tạo nội dung thư trước khi lưu nháp.",
+      );
+    }
+    const draft = {
+      subject: emailSubject.value,
+      body: emailBody.value,
+      date: new Date().toLocaleString(),
+    };
+    localStorage.setItem("mailmate_draft", JSON.stringify(draft));
+    alert("✅ Đã lưu bản nháp thành công vào trình duyệt!");
+  });
+
   document.getElementById("send-direct-btn").addEventListener("click", () => {
     const recipientEmail = document
       .getElementById("recipient-email")
       .value.trim();
     if (!emailSubject.value || !emailBody.value)
       return alert("Vui lòng tạo thư trước khi gửi!");
-    window.location.href = `mailto:${recipientEmail}?subject=${encodeURIComponent(emailSubject.value)}&body=${encodeURIComponent(emailBody.value)}`;
+    const gmailWebLink = `https://mail.google.com/mail/?view=cm&fs=1&to=${recipientEmail}&su=${encodeURIComponent(emailSubject.value)}&body=${encodeURIComponent(emailBody.value)}`;
+    window.open(gmailWebLink, "_blank");
   });
 });

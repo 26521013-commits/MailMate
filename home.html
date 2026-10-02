@@ -31,12 +31,14 @@
                 id="student-name"
                 placeholder="VD: Nguyễn Văn A"
               />
+              <small class="error-text" id="err-student-name"></small>
             </div>
             <div class="form-group">
               <label for="student-class"
                 >Lớp học <span class="required">(*)</span>:</label
               >
               <input type="text" id="student-class" placeholder="VD: 12C3" />
+              <small class="error-text" id="err-student-class"></small>
             </div>
           </div>
 
@@ -45,6 +47,7 @@
               >Mã số (MSSV) <span class="required">(*)</span>:</label
             >
             <input type="text" id="student-id" placeholder="VD: 26521013" />
+            <small class="error-text" id="err-student-id"></small>
           </div>
 
           <div class="form-row">
@@ -57,6 +60,7 @@
                 id="teacher-name"
                 placeholder="VD: Cô Lê Hằng"
               />
+              <small class="error-text" id="err-teacher-name"></small>
             </div>
             <div class="form-group">
               <label for="recipient-email"
@@ -67,6 +71,7 @@
                 id="recipient-email"
                 placeholder="VD: gvien@truong.edu.vn"
               />
+              <small class="error-text" id="err-recipient-email"></small>
             </div>
           </div>
 
@@ -105,6 +110,7 @@
               id="prompt"
               placeholder="VD: Em bị sốt cấp tính, không thể di chuyển..."
             ></textarea>
+            <small class="error-text" id="err-prompt"></small>
           </div>
 
           <button id="generate-btn" class="btn primary">

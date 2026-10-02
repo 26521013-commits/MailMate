@@ -228,3 +228,27 @@ textarea:focus {
   color: #ff4757;
   font-weight: bold;
 }
+/* --- PHẦN STYLE BÁO LỖI (MỚI THÊM) --- */
+.required {
+  color: #e74c3c;
+  font-weight: bold;
+}
+
+/* Hiệu ứng viền đỏ khi có lỗi */
+.input-error {
+  border-color: #e74c3c !important;
+  box-shadow: 0 0 0 2px rgba(231, 76, 60, 0.2) !important;
+}
+
+/* Dòng chữ báo lỗi nhỏ màu đỏ */
+.error-text {
+  color: #e74c3c;
+  font-size: 0.85rem;
+  margin-top: 5px;
+  display: none; /* Mặc định ẩn đi */
+  font-weight: 500;
+}
+
+.error-text.show {
+  display: block; /* Hiện lên khi có lỗi */
+}
