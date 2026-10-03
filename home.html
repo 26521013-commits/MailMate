@@ -16,163 +16,195 @@
   <body>
     <div id="deco" aria-hidden="true"></div>
 
-    <!-- Nút chuyển ngôn ngữ Giao diện ở góc phải -->
-    <div class="lang-switch" id="uiLangSwitch">
-      <button class="btn sm" data-lang="vi">🇻🇳 VI</button>
-      <button class="btn sm" data-lang="en">🇬🇧 EN</button>
-    </div>
-
+    <!-- Hiệu ứng Bot chào mừng -->
     <div id="hello" role="dialog" aria-label="Chào mừng" tabindex="-1">
       <div class="card">
         <div class="bot" aria-hidden="true">
           <i></i><i></i><u></u><u></u><b></b>
         </div>
-        <h2 data-i18n="hello_title">Chào bạn, mình là MailMate ✨</h2>
-        <p data-i18n="hello_sub">
-          Mình là người trợ lý thân thiết của bạn.<br />Hôm nay mình có thể giúp
-          gì cho bạn đây?
+        <h2 data-i18n="hello.title">Chào bạn, mình là MailMate ✨</h2>
+        <p>
+          <span data-i18n="hello.lead">Mình là người trợ lý thân thiết của bạn. Hôm nay mình có thể giúp gì cho bạn đây?</span>
         </p>
-        <button
-          class="btn main"
-          id="hi"
-          style="margin-top: 0"
-          data-i18n="hello_btn"
-        >
-          Bắt đầu soạn thư
-        </button>
+        <button class="btn main" id="hi" style="margin-top: 0" data-i18n="hello.start">Bắt đầu soạn thư</button>
       </div>
     </div>
 
+    <header class="topbar">
+      <a class="brand" href="#"><span class="brand-mark">✉</span><span id="siteName">MailMate</span></a>
+      <nav class="tabs nav" role="tablist" aria-label="Chuyển mục"><span class="nav-thumb"></span>
+        <button class="tab" role="tab" data-v="compose" aria-selected="true" data-i18n="nav.compose">✉️ Soạn email</button>
+        <button class="tab" role="tab" data-v="drafts" aria-selected="false"><span data-i18n="nav.drafts">⏰ Nháp &amp; nhắc nhở</span> <span class="badge" id="draftBadge" hidden>0</span></button>
+        <button class="tab" role="tab" data-v="forum" aria-selected="false" data-i18n="nav.community">💌 Diễn đàn mẫu</button>
+        <button class="tab" role="tab" data-v="admin" aria-selected="false" data-i18n="nav.admin">🔐 Quản trị</button>
+        <button class="tab pro-tab" role="tab" data-v="pro" aria-selected="false" data-i18n="nav.pro">💎 MailMate Pro</button>
+      </nav>
+      <div class="langsw" role="group" aria-label="Language"><button data-ui-lang="vi">VI</button><button data-ui-lang="en">EN</button><button data-ui-lang="ja">JP</button></div>
+    </header>
     <div class="wrap">
-      <!-- Bảng chọn màu và Chế độ Sáng/Tối -->
-      <div class="theme" id="theme" role="group">
-        <button
-          class="btn"
-          id="theme-toggle"
-          style="padding: 4px 10px; font-weight: bold"
-        ></button>
-        <div
-          style="
-            width: 1px;
-            height: 20px;
-            background: var(--line);
-            margin: 0 4px;
-          "
-        ></div>
-        <span data-i18n="theme_color">Màu:</span>
-        <span id="sws" style="display: contents"></span>
-        <button class="btn" id="rst" data-i18n="theme_default">Mặc định</button>
+      <div class="alert-bar" id="alertBar" hidden></div>
+      <h1>MailMate <span class="tw" aria-hidden="true">✦</span></h1>
+      <p class="sub" data-i18n="site.lead">Hôm nay mình có thể giúp gì cho bạn? Điền thông tin bên dưới hoặc tham khảo diễn đàn, mình sẽ soạn email hoàn chỉnh để bạn gửi.</p>
+
+      
+
+      <!-- DIỄN ĐÀN MẪU (cộng đồng) -->
+      <div id="vForum" hidden>
+        <section class="panel drafts" id="forum" aria-label="Diễn đàn mẫu email">
+          <h2 data-i18n="m.title">Diễn đàn mẫu email 💌</h2>
+          <p class="note" data-i18n="m.lead"></p>
+          <div class="toolbar">
+            <input type="search" id="cmSearch" data-i18n-ph="m.search">
+            <select id="cmTopic"></select>
+            <select id="cmSort"><option value="new" data-i18n="m.sortNew"></option><option value="top" data-i18n="m.sortTop"></option></select>
+            <button type="button" class="btn main" id="btnNewPost" data-i18n="m.post"></button>
+          </div>
+          <div class="post-grid" id="postGrid"></div>
+        </section>
       </div>
 
-      <h1>MailMate <span class="tw" aria-hidden="true">✦</span></h1>
-      <p class="sub" data-i18n="main_sub">
-        Hôm nay mình có thể giúp gì cho bạn? Điền thông tin bên dưới hoặc tham
-        khảo diễn đàn, mình sẽ soạn email hoàn chỉnh để bạn gửi.
-      </p>
+      <!-- NHÁP & NHẮC NHỞ -->
+      <div id="vDrafts" hidden>
+        <section class="panel drafts">
+          <h2 data-i18n="d.title"></h2>
+          <p class="note" data-i18n="d.lead"></p>
+          <div class="subtabs" id="draftTabs">
+            <button type="button" data-filter="pending" data-i18n="d.fPending"></button>
+            <button type="button" data-filter="sent" data-i18n="d.fSent"></button>
+            <button type="button" data-filter="all" data-i18n="d.fAll"></button>
+          </div>
+          <div class="ringbar"><span aria-hidden="true">🔔</span>
+            <select id="ringSel" aria-label="Chọn nhạc chuông">
+              <option value="chime" data-i18n="ring.chime">Chuông ngân</option>
+              <option value="marimba" data-i18n="ring.marimba">Marimba</option>
+              <option value="pulse" data-i18n="ring.pulse">Xung điện tử</option>
+              <option value="classic" data-i18n="ring.classic">Báo thức</option>
+              <option value="iphone" data-i18n="ring.iphone">Thông báo iPhone</option>
+              <option value="newtone" data-i18n="ring.newtone">Nhạc chuông mới</option>
+            </select>
+            <button type="button" class="btn" id="ringTest" title="Nghe thử nhạc chuông" data-i18n="ring.test">▶ Nghe thử</button>
+            <label class="btn" for="ringFile" data-i18n="ring.add">＋ Thêm nhạc</label>
+            <input type="file" id="ringFile" accept="audio/*,.mp3,.wav,.ogg,.m4a" multiple hidden>
+            <button type="button" class="btn danger" id="ringDelete" hidden title="Xóa nhạc chuông đang chọn" data-i18n="ring.delete">🗑 Xóa nhạc</button>
+          </div>
+          <p class="note ring-note" data-i18n="ring.note">Bạn có thể thêm nhiều file âm thanh từ máy tính. Nhạc được lưu trong trình duyệt hiện tại.</p>
+          <div class="card-list" id="draftList"></div>
+        </section>
+      </div>
 
-      <nav class="tabs nav" role="tablist">
-        <button
-          class="tab"
-          role="tab"
-          data-v="compose"
-          aria-selected="true"
-          data-i18n="tab_compose"
-        >
-          ✉ Soạn email
-        </button>
-        <button
-          class="tab"
-          role="tab"
-          data-v="forum"
-          aria-selected="false"
-          data-i18n="tab_forum"
-        >
-          💌 Diễn đàn mẫu
-        </button>
-      </nav>
-
-      <div id="vForum" hidden>
-        <section class="panel drafts" id="forum">
-          <h2 data-i18n="forum_title">Diễn đàn mẫu email 💌</h2>
-          <div id="fbody">
-            <div id="flist">
-              <!-- Các bài mẫu cộng đồng sẽ được chèn tự động vào đây -->
+      <!-- QUẢN TRỊ -->
+      <div id="vAdmin" hidden>
+        <section class="panel drafts">
+          <h2 data-i18n="a.title"></h2>
+          <form class="gate" id="formLogin">
+            <p class="note" data-i18n="a.gate"></p>
+            <label class="field"><span data-i18n="a.pin"></span><input type="password" name="pin" autocomplete="current-password" required></label>
+            <button type="submit" class="btn main" data-i18n="a.login"></button>
+          </form>
+          <div id="adminPanel" hidden>
+            <div class="subtabs" id="adminTabs">
+              <button type="button" data-tab="settings" data-i18n="a.tabSettings"></button>
+              <button type="button" data-tab="topics" data-i18n="a.tabTopics"></button>
+              <button type="button" data-tab="posts" data-i18n="a.tabPosts"></button>
+              <button type="button" data-tab="data" data-i18n="a.tabData"></button>
+              <button type="button" id="btnLogout" data-i18n="a.logout"></button>
+            </div>
+            <div class="admin-pane" data-pane="settings">
+              <form class="form-grid" id="formSettings">
+                <label class="field"><span data-i18n="a.siteName"></span><input name="siteName" maxlength="40" required></label>
+                <label class="field"><span data-i18n="a.autoRemind"></span><input name="autoRemindHours" type="number" min="0" max="720" required></label>
+                <label class="field"><span data-i18n="a.defUi"></span><select name="uiLang"><option value="vi" data-i18n="lang.vi">Tiếng Việt</option><option value="en">English</option></select></label>
+                <label class="field"><span data-i18n="a.defMail"></span><select name="mailLang"><option value="vi" data-i18n="lang.vi">Tiếng Việt</option><option value="en">English</option><option value="both" data-i18n="c.both"></option></select></label>
+                <label class="field"><span data-i18n="a.defTone"></span><select name="tone"><option value="formal" data-i18n="c.formal"></option><option value="friendly" data-i18n="c.friendly"></option></select></label>
+                <label class="field"><span data-i18n="a.newPin"></span><input name="newPin" type="password" minlength="4" autocomplete="new-password"></label>
+                <label class="check"><input type="checkbox" name="moderation"><span data-i18n="a.moderation"></span></label>
+                <label class="check"><input type="checkbox" name="comments"><span data-i18n="a.allowComments"></span></label>
+                <div class="wide"><button type="submit" class="btn main" data-i18n="g.save"></button></div>
+              </form>
+            </div>
+            <div class="admin-pane" data-pane="topics" hidden>
+              <div class="bar"><button type="button" class="btn main" style="width:auto;margin:0" id="btnAddTopic" data-i18n="a.addTopic"></button><button type="button" class="btn" id="btnResetTopics" data-i18n="a.resetTopics"></button></div>
+              <ul class="row-list" id="adminTopics"></ul>
+            </div>
+            <div class="admin-pane" data-pane="posts" hidden><ul class="row-list" id="adminPosts"></ul></div>
+            <div class="admin-pane" data-pane="data" hidden>
+              <div class="bar">
+                <button type="button" class="btn" id="btnExport" data-i18n="a.export"></button>
+                <label class="btn" for="fileImport" data-i18n="a.import"></label>
+                <input type="file" id="fileImport" accept="application/json" hidden>
+                <button type="button" class="btn danger" id="btnWipe" data-i18n="a.wipe"></button>
+              </div>
             </div>
           </div>
         </section>
       </div>
 
+      <!-- MAILMATE GO / PRO -->
+      <div id="vPro" hidden>
+        <section class="panel pro-hero">
+          <span class="pro-kicker" data-i18n="pro.kicker">MAILMATE MEMBERSHIP</span>
+          <h2 data-i18n="pro.title">Nâng cấp trải nghiệm viết email</h2>
+          <p class="note" data-i18n="pro.lead">Chọn gói phù hợp với bạn. Đây là giao diện minh họa; chưa có thanh toán tự động.</p>
+        </section>
+        <div class="plan-grid">
+          <article class="plan-card"><span class="plan-icon">✉️</span><h3>MailMate Free</h3><p class="plan-price">0¥ <small data-i18n="pro.forever">/ mãi mãi</small></p><ul><li data-i18n="pro.free1">Mẫu email cơ bản</li><li data-i18n="pro.free2">Lưu nháp trên thiết bị</li><li data-i18n="pro.free3">Cộng đồng chia sẻ</li></ul><button class="btn" type="button" data-plan="free" data-i18n="pro.current">Gói hiện tại</button></article>
+          <article class="plan-card plan-go"><span class="plan-icon">🚀</span><h3>MailMate Go</h3><p class="plan-price">1807¥ <small data-i18n="pro.month">/ tháng</small></p><ul><li data-i18n="pro.go1">Nhiều mẫu email hơn</li><li data-i18n="pro.go2">Tùy chỉnh giao diện</li><li data-i18n="pro.go3">Quản lý nhắc nhở nâng cao</li></ul><button class="btn main" type="button" data-plan="go" data-i18n="pro.chooseGo">Chọn MailMate Go</button></article>
+          <article class="plan-card plan-pro"><span class="plan-icon">💎</span><h3>MailMate Pro</h3><p class="plan-price">2008¥ <small data-i18n="pro.month">/ tháng</small></p><ul><li data-i18n="pro.pro1">Trải nghiệm đầy đủ tính năng</li><li data-i18n="pro.pro2">Bộ mẫu chuyên nghiệp</li><li data-i18n="pro.pro3">Ưu tiên tính năng mới</li></ul><button class="btn main" type="button" data-plan="pro" data-i18n="pro.choosePro">Nâng cấp Pro</button></article>
+        </div>
+        <section id="paymentPanel" class="panel payment-panel" hidden>
+          <div><h2 data-i18n="pay.title">Thanh toán gói</h2><p id="selectedPlan" class="plan-price"></p><p class="note" data-i18n="pay.note">Mã QR bên dưới chỉ là hình minh họa. Hãy thay bằng QR thanh toán thật của bạn trước khi công khai.</p></div>
+          <div class="qr-placeholder" role="img" aria-label="Demo QR code placeholder">
+            <svg viewBox="0 0 210 210" aria-hidden="true"><rect width="210" height="210" fill="#fff"/><g fill="#101828"><path d="M10 10h60v60H10z M20 20v40h40V20z M30 30h20v20H30z M140 10h60v60h-60z M150 20v40h40V20z M160 30h20v20h-20z M10 140h60v60H10z M20 150v40h40v-40z M30 160h20v20H30z"/><path d="M85 10h15v15H85z M105 10h15v30h-15z M80 35h20v15H80z M105 50h15v15h-15z M80 65h15v15H80z M95 85h15v15H95z M120 80h15v15h-15z M145 85h15v15h-15z M170 85h30v15h-30z M80 105h15v25H80z M105 105h30v15h-30z M145 110h15v15h-15z M170 110h30v15h-30z M95 135h15v15H95z M115 135h15v30h-15z M140 140h20v15h-20z M170 140h15v15h-15z M85 165h15v15H85z M105 175h15v25h-15z M130 175h15v15h-15z M150 165h15v15h-15z M175 175h25v15h-25z"/></g></svg>
+            <b data-i18n="pay.placeholder">QR MINH HỌA</b>
+          </div>
+        </section>
+      </div>
+
+      <!-- SOẠN THƯ -->
       <div id="vCompose">
-        <div class="grid">
-          <section class="panel">
-            <h2 data-i18n="panel_config">Thông tin & Cấu hình</h2>
+        <div class="subtabs" id="modeTabs">
+          <button type="button" data-mode="quick" data-i18n="c.modeQuick"></button>
+          <button type="button" data-mode="tpl" data-i18n="c.modeTpl"></button>
+        </div>
+        <div class="grid" id="modeQuick">
+          <section class="panel" aria-label="Thông tin email">
+            <h2 data-i18n="quick.info">Thông tin &amp; Cấu hình</h2>
 
             <div>
-              <label for="topic"
-                ><span data-i18n="lbl_topic">Chủ đề email</span>
-                <span class="required">(*)</span></label
-              >
-              <select id="topic"></select>
-            </div>
-
-            <div class="row">
-              <div>
-                <label for="rcp"
-                  ><span data-i18n="lbl_role">Vai trò người nhận</span>
-                  <span class="required">(*)</span></label
-                >
-                <select id="rcp"></select>
-                <input
-                  id="rcpx"
-                  hidden
-                  placeholder="VD: Trưởng phòng đào tạo"
-                  style="margin-top: 6px"
-                />
-              </div>
-              <div>
-                <label for="tone" data-i18n="lbl_tone">Giọng điệu</label>
-                <select id="tone">
-                  <option value="Trang trọng" data-i18n="tone_formal">
-                    Trang trọng (Dành cho cấp trên, đối tác)
-                  </option>
-                  <option value="Lịch sự, gần gũi" data-i18n="tone_friendly">
-                    Lịch sự, gần gũi (Đồng nghiệp)
-                  </option>
-                  <option value="Ngắn gọn, thẳng thắn" data-i18n="tone_short">
-                    Ngắn gọn, đi thẳng vào vấn đề
-                  </option>
-                </select>
-              </div>
+              <label for="topic" data-i18n="quick.topic">Chủ đề email</label>
+              <select id="topic">
+                <option value="nghi-hoc" data-i18n="quick.topicLeave">Xin nghỉ học / nghỉ làm</option>
+                <option value="nop-tre" data-i18n="quick.topicLate">Xin nộp bài trễ</option>
+                <option value="ung-tuyen" data-i18n="quick.topicJob">Ứng tuyển / Xin thực tập</option>
+                <option value="khac" data-i18n="quick.topicOther">Khác (Liên hệ chung)</option>
+              </select>
             </div>
 
             <div class="row">
               <div>
                 <label for="rname"
-                  ><span data-i18n="lbl_rname">Tên người nhận cụ thể</span>
-                  <span class="required">(*)</span></label
+                   ><span data-i18n="quick.recipient">Tên Giảng viên/Người nhận</span> <span class="required">(*)</span></label
                 >
-                <input id="rname" placeholder="VD: Cô Lê Hằng" />
+                <input id="rname" placeholder="VD: Thầy Shin" data-i18n-ph="quick.phRecipient" />
                 <small class="error-text" id="err-rname"></small>
               </div>
               <div>
                 <label for="me"
-                  ><span data-i18n="lbl_me">Họ và tên của bạn</span>
-                  <span class="required">(*)</span></label
+                   ><span data-i18n="quick.yourName">Họ và tên của bạn</span> <span class="required">(*)</span></label
                 >
-                <input id="me" placeholder="VD: Nguyễn Văn A" />
+                <input id="me" placeholder="VD: Bé Lê Dăn Đạt" data-i18n-ph="quick.phName" />
                 <small class="error-text" id="err-me"></small>
               </div>
             </div>
 
             <div>
               <label for="rto"
-                ><span data-i18n="lbl_email">Email người nhận</span>
-                <span class="required">(*)</span></label
+                 ><span data-i18n="quick.email">Email người nhận</span> <span class="required">(*)</span></label
               >
               <input
                 id="rto"
                 type="email"
-                placeholder="gvien@truong.edu.vn"
+                placeholder="mssv@gm.uit.edu.vn" data-i18n-ph="quick.phEmail"
                 autocomplete="off"
               />
               <small class="error-text" id="err-rto"></small>
@@ -181,71 +213,63 @@
             <div class="row">
               <div>
                 <label for="sid"
-                  ><span data-i18n="lbl_sid">Mã số sinh viên</span>
-                  <span class="required">(*)</span></label
+                   ><span data-i18n="quick.studentId">Mã số sinh viên</span> <span class="required">(*)</span></label
                 >
                 <input
                   id="sid"
-                  placeholder="VD: 21110123"
+                  placeholder="VD: 21110123" data-i18n-ph="quick.phId"
                   inputmode="numeric"
                 />
                 <small class="error-text" id="err-sid"></small>
               </div>
               <div>
                 <label for="maj"
-                  ><span data-i18n="lbl_maj">Lớp / Ngành</span>
-                  <span class="required">(*)</span></label
+                   ><span data-i18n="quick.class">Lớp / Ngành</span> <span class="required">(*)</span></label
                 >
-                <input id="maj" placeholder="VD: 12C3 / CNTT" />
+                <input id="maj" placeholder="VD: 12C3 / CNTT" data-i18n-ph="quick.phClass" />
                 <small class="error-text" id="err-maj"></small>
               </div>
             </div>
 
-            <div class="note" style="margin-top: 0" data-i18n="note_save">
-              Trình duyệt sẽ tự động nhớ thông tin cá nhân của bạn cho lần sau.
+            <div class="note" style="margin-top: 0">
+              <span data-i18n="quick.remember">Trình duyệt sẽ tự động nhớ thông tin của bạn cho lần sau.</span>
             </div>
 
             <label for="pts"
-              ><span data-i18n="lbl_reason">Lý do / Ý chính cần nói</span>
-              <span class="required">(*)</span></label
+               ><span data-i18n="quick.reason">Lý do chi tiết</span> <span class="required">(*)</span></label
             >
             <textarea
               id="pts"
-              placeholder="VD: Em bị sốt cấp tính từ đêm qua, không thể đi học được..."
+              placeholder="VD: Em bị sốt cấp tính từ đêm qua, không thể đi học được..." data-i18n-ph="quick.phReason"
             ></textarea>
             <small class="error-text" id="err-pts"></small>
 
-            <label for="lang" data-i18n="lbl_lang">Ngôn ngữ đích</label>
+            <label for="qTone" data-i18n="c.tone">Giọng điệu</label>
+            <select id="qTone"><option value="formal" data-i18n="c.formal">Trang trọng</option><option value="friendly" data-i18n="c.friendly">Thân thiện</option></select>
+
+            <label for="lang" data-i18n="quick.targetLang">Ngôn ngữ đích</label>
             <select id="lang">
-              <option value="vi">Tiếng Việt</option>
-              <option value="en">Tiếng Anh (English)</option>
-              <option value="ja">Tiếng Nhật (日本語)</option>
+              <option value="vi" data-i18n="lang.vi">Tiếng Việt</option>
+              <option value="en" data-i18n="lang.en">Tiếng Anh</option>
+              <option value="ja" data-i18n="lang.ja">Tiếng Nhật</option>
             </select>
 
-            <button class="btn main" id="go" data-i18n="btn_generate">
-              ✨ AI Soạn Email Ngay
-            </button>
+            <button class="btn main" id="go" data-i18n="quick.generate">✨ AI Soạn Email Ngay</button>
           </section>
 
-          <section class="letter mail">
-            <div id="empty" class="empty" data-i18n="empty_mail">
-              Email của bạn sẽ hiện ở đây. Bạn có thể sửa trực tiếp.
-            </div>
+          <section class="letter mail" aria-label="Email đã soạn">
+            <div id="empty" class="empty" data-i18n="quick.empty">Email của bạn sẽ hiện ở đây. Bạn có thể sửa trực tiếp.</div>
             <div id="out" hidden>
-              <label for="to" data-i18n="out_to">Đến (email)</label>
+              <label for="to" data-i18n="quick.to">Đến (email)</label>
               <input id="to" type="email" />
-              <label for="subj" data-i18n="out_subj">Tiêu đề</label>
+              <label for="subj" data-i18n="c.subject">Tiêu đề</label>
               <input id="subj" class="subj" />
-              <label for="body" data-i18n="out_body">Nội dung</label>
+              <label for="body" data-i18n="c.body">Nội dung</label>
               <textarea id="body"></textarea>
 
               <div class="bar">
-                <button class="btn" id="copy" data-i18n="btn_copy">
-                  📋 Sao chép
-                </button>
-                <button class="btn" id="save" data-i18n="btn_save">
-                  💾 Lưu nháp
-                </button>
+                <button class="btn" id="copy" data-i18n="c.copy">📋 Sao chép</button>
+                <button class="btn" id="save" data-i18n="c.save">💾 Lưu nháp</button>
                 <a
                   class="btn"
                   id="gm"
@@ -256,16 +280,7 @@
                     border-color: var(--acc);
                     color: var(--onacc);
                   "
-                  >🚀 Gmail ➜</a
-                >
-                <button
-                  class="btn primary"
-                  id="shareToCommunity"
-                  style="margin-left: auto"
-                  data-i18n="btn_share"
-                >
-                  🌐 Chia sẻ lên diễn đàn
-                </button>
+                  data-i18n="quick.gmail">🚀 Gửi qua Gmail ➜</a>
               </div>
 
               <div class="note" style="margin-top: 15px" id="msg"></div>
@@ -273,49 +288,119 @@
           </section>
         </div>
 
-        <section class="panel drafts">
-          <h2 data-i18n="draft_title">Nháp chưa gửi</h2>
-          <div id="dl">
-            <div class="note" data-i18n="draft_empty">Chưa có nháp nào.</div>
+                <div id="modeTpl" hidden>
+          <div class="layout">
+            <div class="panel">
+              <h2 data-i18n="c.step1"></h2>
+              <div class="topic-grid" id="topicGrid"></div>
+              <h2 data-i18n="c.step2"></h2>
+              <div class="row">
+                <div><label for="tone" data-i18n="c.tone"></label><select id="tone"><option value="formal" data-i18n="c.formal"></option><option value="friendly" data-i18n="c.friendly"></option></select></div>
+                <div><label for="mailLang" data-i18n="c.mailLang"></label><select id="mailLang"><option value="vi" data-i18n="lang.vi">Tiếng Việt</option><option value="en">English</option><option value="both" data-i18n="c.both"></option></select></div>
+              </div>
+              <p class="note" id="bilingualHint" data-i18n="c.bilingualHint" hidden></p>
+              <h2 style="margin-top:18px" data-i18n="c.step3"></h2>
+              <div class="fields" id="fields"></div>
+              <div class="bar"><button type="button" class="btn" id="btnSample" data-i18n="c.sample"></button><button type="button" class="btn" id="btnReset" data-i18n="c.reset"></button></div>
+            </div>
+            <div class="letter sheet">
+              <div class="sheet-head"><h2 data-i18n="c.result"></h2><span class="chip chip-warn" id="editingBadge" data-i18n="c.editingDraft" hidden></span></div>
+              <p class="status" id="missingInfo"></p>
+              <div id="outputs"></div>
+              <div class="bar">
+                <button type="button" class="btn" id="btnCopy" data-i18n="c.copy"></button>
+                <button type="button" class="btn" id="btnMail" data-i18n="c.mailto"></button>
+                <button type="button" class="btn" id="btnGmail">🚀 Gmail</button>
+                <button type="button" class="btn" id="btnSave" data-i18n="c.save"></button>
+                <button type="button" class="btn" id="btnShare" data-i18n="c.share"></button>
+              </div>
+            </div>
           </div>
+        </div>
+
+        <section class="panel drafts" aria-label="Nháp">
+          <h2 data-i18n="d.unfinished">Nháp chưa gửi</h2>
+          <div id="dl"><div class="note" data-i18n="d.emptyQuick">Chưa có nháp nào.</div></div>
         </section>
       </div>
     </div>
 
-    <!-- Hộp thoại chia sẻ bài viết (Dialog) -->
-    <dialog class="dlg" id="dlgShare">
-      <h3 data-i18n="dlg_share_title" style="margin-top: 0">
-        Đăng lên diễn đàn
-      </h3>
-      <p class="hint" data-i18n="dlg_share_hint">
-        Hãy đảm bảo xóa các thông tin cá nhân nhạy cảm trước khi chia sẻ mẫu này
-        với mọi người.
-      </p>
+    <section class="reviews wrap" id="reviews">
+      <h2 data-i18n="rv.title">Khách hàng nói gì về MailMate</h2>
+      <div class="rv-filter" id="rvFilter"><button data-f="all" class="active" data-i18n="rv.all">Tất cả</button><button data-f="pos" data-i18n="rv.pos">Tích cực</button><button data-f="neg" data-i18n="rv.neg">Cần cải thiện</button></div>
+      <div class="rv-grid" id="rvGrid"></div>
+      <p class="note" data-i18n="rv.note"></p>
+      <section class="panel feedback-panel" aria-labelledby="feedbackTitle">
+        <h3 id="feedbackTitle" data-i18n="fb.title">Đóng góp ý kiến về MailMate</h3>
+        <p class="note" data-i18n="fb.lead">Chia sẻ trải nghiệm thực tế, đánh giá số sao và đề xuất cải thiện.</p>
+        <form id="feedbackForm" class="feedback-form">
+          <label class="field"><span data-i18n="fb.name">Tên hiển thị (không bắt buộc)</span><input name="name" maxlength="40" data-i18n-ph="fb.phName" placeholder="Tên của bạn"></label>
+          <div class="field"><span data-i18n="fb.rating">Đánh giá của bạn</span><div id="feedbackStars" class="feedback-stars" role="radiogroup" aria-label="Rating">
+            <button type="button" data-rating="1" aria-label="1 star">★</button><button type="button" data-rating="2" aria-label="2 stars">★</button><button type="button" data-rating="3" aria-label="3 stars">★</button><button type="button" data-rating="4" aria-label="4 stars">★</button><button type="button" data-rating="5" aria-label="5 stars">★</button>
+          </div></div>
+          <label class="field"><span data-i18n="fb.comment">Ý kiến đóng góp</span><textarea name="comment" rows="4" maxlength="1000" required data-i18n-ph="fb.phComment" placeholder="Bạn thích điểm nào? Điều gì nên cải thiện?"></textarea></label>
+          <button type="submit" class="btn main" data-i18n="fb.submit">Gửi đánh giá</button>
+          <p class="note" id="feedbackStatus" role="status"></p>
+        </form>
+      </section>
+    </section>
 
-      <label style="margin-top: 15px"
-        ><span data-i18n="dlg_share_name">Tiêu đề bài viết</span>
-        <span class="required">(*)</span></label
-      >
-      <input
-        id="sharePostTitle"
-        style="width: 100%; margin-bottom: 10px"
-        required
-      />
+    <div class="island" id="island" role="status" aria-live="polite"></div>
 
-      <label
-        ><span data-i18n="dlg_share_author">Tên tác giả (Tùy chọn)</span></label
-      >
-      <input id="sharePostAuthor" style="width: 100%; margin-bottom: 20px" />
-
-      <div style="display: flex; justify-content: flex-end; gap: 8px">
-        <button class="btn" id="cancelShare" data-i18n="btn_cancel">Hủy</button>
-        <button class="btn primary" id="confirmShare" data-i18n="btn_post">
-          Đăng bài
-        </button>
+    <div class="dock" id="theme" role="group" aria-label="Theme">
+      <div class="dock-items">
+        <span id="sws" class="sws"></span>
+        <button class="dock-btn" id="rst" title="Reset">↺</button>
+        <button class="dock-btn" id="theme-toggle" title="Dark / Light"></button>
       </div>
-    </dialog>
+      <button class="dock-btn dock-main" id="dockMain" aria-label="Colors">🎨</button>
+    </div>
 
-    <script src="data.js"></script>
+    <dialog class="dlg" id="dlgReminder">
+      <form id="formReminder">
+        <h3 data-i18n="r.title"></h3><p class="note" data-i18n="r.lead"></p>
+        <label data-i18n="r.time"></label><input type="datetime-local" id="remindInput">
+        <div class="bar">
+          <button type="button" class="btn" data-mins="60" data-i18n="r.q1h"></button>
+          <button type="button" class="btn" data-mins="1440" data-i18n="r.q1d"></button>
+          <button type="button" class="btn" data-mins="4320" data-i18n="r.q3d"></button>
+        </div>
+        <div class="dlg-actions">
+          <button type="button" class="btn" id="remindNone" data-i18n="r.none"></button>
+          <button type="button" class="btn" data-close data-i18n="g.cancel"></button>
+          <button type="submit" class="btn main" style="width:auto;margin:0" data-i18n="g.save"></button>
+        </div>
+      </form>
+    </dialog>
+    <dialog class="dlg" id="dlgPost">
+      <form id="formPost" class="form-grid">
+        <h3 class="wide" data-i18n="m.post"></h3><p class="note wide" data-i18n="m.privacy"></p>
+        <label class="field wide"><span data-i18n="m.postTitle"></span><input name="title" maxlength="80" required></label>
+        <label class="field"><span data-i18n="m.topic"></span><select name="topicId"></select></label>
+        <label class="field"><span data-i18n="m.lang"></span><select name="lang"><option value="vi" data-i18n="lang.vi">Tiếng Việt</option><option value="en">English</option></select></label>
+        <label class="field wide"><span data-i18n="c.subject"></span><input name="subject" maxlength="150" required></label>
+        <label class="field wide"><span data-i18n="c.body"></span><textarea name="body" rows="9" required></textarea></label>
+        <label class="field wide"><span data-i18n="m.author"></span><input name="author" maxlength="40"></label>
+        <div class="dlg-actions wide"><button type="button" class="btn" data-close data-i18n="g.cancel"></button><button type="submit" class="btn main" style="width:auto;margin:0" data-i18n="m.submit"></button></div>
+      </form>
+    </dialog>
+    <dialog class="dlg dlg-wide" id="dlgDetail"><div id="detailBody"></div></dialog>
+    <dialog class="dlg dlg-wide" id="dlgTopic">
+      <form id="formTopic" class="form-grid">
+        <h3 class="wide" id="topicDlgTitle"></h3>
+        <p class="note wide"><span data-i18n="a.phHint"></span> <span class="code-list" id="phList"></span></p>
+        <label class="field"><span data-i18n="a.icon"></span><input name="icon" maxlength="4" required></label><span></span>
+        <label class="field"><span data-i18n="a.nameVi"></span><input name="nameVi" required></label>
+        <label class="field"><span data-i18n="a.nameEn"></span><input name="nameEn" required></label>
+        <label class="field"><span data-i18n="a.subjVi"></span><input name="subjVi" required></label>
+        <label class="field"><span data-i18n="a.subjEn"></span><input name="subjEn" required></label>
+        <label class="field"><span data-i18n="a.bodyVi"></span><textarea name="bodyVi" rows="9" required></textarea></label>
+        <label class="field"><span data-i18n="a.bodyEn"></span><textarea name="bodyEn" rows="9" required></textarea></label>
+        <div class="dlg-actions wide"><button type="button" class="btn" data-close data-i18n="g.cancel"></button><button type="submit" class="btn main" style="width:auto;margin:0" data-i18n="g.save"></button></div>
+      </form>
+    </dialog>
+    <div class="toasts" id="toasts" aria-live="polite"></div>
+
     <script src="script.js"></script>
   </body>
 </html>
