@@ -1,0 +1,56 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function owns(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.email in [
+          '26521830@gm.uit.edu.vn',
+          '26520175@gm.uit.edu.vn',
+          '26521013@gm.uit.edu.vn',
+          '26520837@gm.uit.edu.vn',
+          '26521241@gm.uit.edu.vn',
+          '26520491@gm.uit.edu.vn',
+          '26521606@gm.uit.edu.vn'
+        ];
+    }
+
+    match /adminAccess/{userId} {
+      allow get: if request.auth != null && request.auth.uid == userId && isAdmin();
+      allow list, create, update, delete: if false;
+    }
+
+    match /users/{userId} {
+      allow get: if owns(userId);
+      allow list: if false;
+      allow create, update: if owns(userId)
+        && request.resource.data.keys().hasOnly([
+          'email', 'displayName', 'photoURL', 'profile', 'updatedAt'
+        ])
+        && request.resource.data.profile is map;
+      allow delete: if false;
+
+      match /drafts/{draftId} {
+        allow read: if owns(userId);
+        allow create, update: if owns(userId)
+          && request.resource.data.keys().hasOnly(['id', 'item'])
+          && request.resource.data.id is string
+          && request.resource.data.item is map;
+        allow delete: if owns(userId);
+      }
+
+      match /quickDrafts/{draftId} {
+        allow read: if owns(userId);
+        allow create, update: if owns(userId)
+          && request.resource.data.keys().hasOnly(['id', 'item'])
+          && request.resource.data.id is string
+          && request.resource.data.item is map;
+        allow delete: if owns(userId);
+      }
+    }
+  }
+}

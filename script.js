@@ -1,3 +1,4 @@
+window.VT = (s) => s;
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => document.querySelectorAll(s);
 
@@ -6,6 +7,7 @@ function store(k, v) {
   try {
     if (v === undefined) return JSON.parse(localStorage.getItem(k) || "null");
     localStorage.setItem(k, JSON.stringify(v));
+    if (["mm_profile", "mm_drafts", "mm2.drafts"].includes(k)) window.dispatchEvent(new CustomEvent("mailmate:data-changed", { detail: { key: k } }));
   } catch (e) {
     return null;
   }
@@ -146,16 +148,17 @@ function removeVietnameseTones(str) {
     .replace(/Đ/g, "D");
 }
 
-async function translateText(text, targetLang) {
-  if (targetLang === "vi") return text;
+async function translateText(text, targetLang, fromLang = "vi") {
+  if (targetLang === fromLang) return text;
   try {
     const response = await fetch(
-      `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=vi|${targetLang}`,
+      `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${fromLang}|${targetLang}`,
     );
     const data = await response.json();
+    if (Number(data.responseStatus) !== 200) throw new Error("mm");
     return data.responseData.translatedText;
   } catch (error) {
-    return text + " (Lỗi dịch tự động)";
+    return fromLang === "en" ? text : text + " (Lỗi dịch tự động)";
   }
 }
 
@@ -175,49 +178,49 @@ $("#go").onclick = async () => {
 
   // Bắt lỗi đỏ: Tên người nhận
   if (!rname) {
-    showError("rname", "Vui lòng nhập tên người nhận.");
+    showError("rname", VT("Vui lòng nhập tên người nhận."));
     hasError = true;
   } else if (invalidCharRegex.test(rname)) {
-    showError("rname", "Tên không được chứa số/ký tự đặc biệt.");
+    showError("rname", VT("Tên không được chứa số/ký tự đặc biệt."));
     hasError = true;
   }
 
   // Bắt lỗi đỏ: Tên sinh viên
   if (!me) {
-    showError("me", "Vui lòng nhập họ và tên của bạn.");
+    showError("me", VT("Vui lòng nhập họ và tên của bạn."));
     hasError = true;
   } else if (invalidCharRegex.test(me)) {
-    showError("me", "Họ tên không được chứa số/ký tự đặc biệt.");
+    showError("me", VT("Họ tên không được chứa số/ký tự đặc biệt."));
     hasError = true;
   }
 
   // Bắt lỗi đỏ: Email
   if (!rto) {
-    showError("rto", "Vui lòng nhập email.");
+    showError("rto", VT("Vui lòng nhập email."));
     hasError = true;
   } else if (!rto.includes("@")) {
-    showError("rto", "Email phải có ký tự '@'.");
+    showError("rto", VT("Email phải có ký tự '@'."));
     hasError = true;
   }
 
   // Bắt lỗi đỏ: Lớp/Ngành (Không được bỏ trống)
   if (!maj) {
-    showError("maj", "Vui lòng nhập Lớp/Ngành học.");
+    showError("maj", VT("Vui lòng nhập Lớp/Ngành học."));
     hasError = true;
   }
 
   // Bắt lỗi đỏ: MSSV (Không được bỏ trống + Không được có chữ)
   if (!sid) {
-    showError("sid", "Vui lòng nhập MSSV.");
+    showError("sid", VT("Vui lòng nhập MSSV."));
     hasError = true;
   } else if (nonDigitRegex.test(sid)) {
-    showError("sid", "MSSV bị lỗi (Chỉ được chứa số, không chứa chữ cái).");
+    showError("sid", VT("MSSV bị lỗi (Chỉ được chứa số, không chứa chữ cái)."));
     hasError = true;
   }
 
   // Bắt lỗi đỏ: Lý do
   if (!pts) {
-    showError("pts", "Vui lòng nhập lý do chi tiết.");
+    showError("pts", VT("Vui lòng nhập lý do chi tiết."));
     hasError = true;
   }
 
@@ -226,10 +229,11 @@ $("#go").onclick = async () => {
 
   // Bắt đầu tạo thư
   $("#go").disabled = true;
-  $("#go").innerText = window.mailMateTranslate?.("quick.generating") || "⏳ AI đang dịch và tạo thư...";
+  $("#go").innerText = VT("⏳ AI đang dịch và tạo thư...");
   $("#msg").innerText = "";
 
   const lang = $("#lang").value;
+  const EXT = !["vi", "en", "ja"].includes(lang); // ngôn ngữ khác: soạn bản tiếng Anh rồi dịch
   const topic = $("#topic").value;
 
   let finalName = me;
@@ -240,11 +244,15 @@ $("#go").onclick = async () => {
   }
 
   // Chờ dịch lý do chi tiết
-  let finalDetails = await translateText(pts, lang);
+  let finalDetails = await translateText(pts, EXT ? "en" : lang);
   let finalSubject = "",
     finalBody = "";
 
-  if (topic === "nghi-hoc") {
+  if (EXT) {
+    const g = quickGeneric(topic, "en", finalName, finalTeacher, sid, maj, finalDetails);
+    finalBody = applyQuickTone(g.b, "en");
+    [finalSubject, finalBody] = await Promise.all([translateText(g.s, lang, "en"), translateLines(finalBody, lang)]);
+  } else if (topic === "nghi-hoc") {
     if (lang === "vi") {
       finalSubject = `[XIN NGHỈ HỌC] - ${finalName} - MSSV: ${sid}`;
       finalBody = `Kính gửi ${finalTeacher},\n\nEm tên là: ${finalName}\nMã số SV: ${sid}\nLớp/Ngành: ${maj}\n\nEm viết thư này kính xin phép ${finalTeacher} cho em được nghỉ buổi học hôm nay.\nLý do: ${finalDetails}\n\nEm xin cam kết sẽ tự nghiên cứu bài giảng và hoàn thiện các bài tập đầy đủ.\n\nEm xin chân thành cảm ơn.\n\nTrân trọng,\n${finalName}`;
@@ -256,8 +264,9 @@ $("#go").onclick = async () => {
       finalBody = `${finalTeacher} 先生\n\nお疲れ様です。\n${maj}の ${finalName}（学籍番号: ${sid}）です。\n\n誠に恐縮ですが、本日の授業を欠席させていただきたくご連絡いたしました。\n理由：${finalDetails}\n\n欠席した分の課題については後日提出いたします。\n\nよろしくお願いいたします。\n\n敬具\n${finalName}`;
     }
   } else {
-    finalSubject = `[${topic.toUpperCase()}] - ${finalName} - ${sid}`;
-    finalBody = `Kính gửi ${finalTeacher},\n\nThông tin sinh viên:\n- Họ tên: ${finalName}\n- MSSV: ${sid}\n- Lớp/Ngành: ${maj}\n\nNội dung: ${finalDetails}\n\nTrân trọng,\n${finalName}`;
+    const g = quickGeneric(topic, lang, finalName, finalTeacher, sid, maj, finalDetails);
+    finalSubject = g.s;
+    finalBody = g.b;
   }
 
   finalBody = applyQuickTone(finalBody, lang); // (mới) giọng điệu
@@ -272,8 +281,8 @@ $("#go").onclick = async () => {
   $("#empty").hidden = true;
   $("#out").hidden = false;
   $("#go").disabled = false;
-  $("#go").innerText = window.mailMateTranslate?.("quick.generate") || "✨ AI Soạn Email Ngay";
-  $("#msg").innerText = window.mailMateTranslate?.("quick.created") || "✅ Đã tạo thư thành công!";
+  $("#go").innerText = VT("✨ AI Soạn Email Ngay");
+  $("#msg").innerText = VT("✅ Đã tạo thư thành công!");
 };
 
 // ------------------------------------
@@ -310,12 +319,12 @@ PF.forEach((id) => {
 
 // Sao chép
 $("#copy").onclick = async () => {
-  const t = `Tiêu đề: ${$("#subj").value}\n\n${$("#body").value}`;
+  const t = `${VT("Tiêu đề")}: ${$("#subj").value}\n\n${$("#body").value}`;
   try {
     await navigator.clipboard.writeText(t);
-    $("#msg").innerText = window.mailMateTranslate?.("quick.copied") || "✅ Đã sao chép vào khay nhớ tạm.";
+    $("#msg").innerText = VT("✅ Đã sao chép vào khay nhớ tạm.");
   } catch (err) {
-    alert("Lỗi sao chép!");
+    alert(VT("Lỗi sao chép!"));
   }
 };
 
@@ -336,12 +345,12 @@ function drawDrafts() {
 }
 $("#save").onclick = () => {
   if (!$("#subj").value.trim() && !$("#body").value.trim())
-    return alert("⚠️ Thư đang trống!");
+    return alert(VT("⚠️ Thư đang trống!"));
   const d = store("mm_drafts") || [];
   d.unshift({ id: Date.now(), subj: $("#subj").value, body: $("#body").value });
   store("mm_drafts", d);
   drawDrafts();
-  $("#msg").innerText = window.mailMateTranslate?.("quick.saved") || "✅ Đã lưu nháp!";
+  $("#msg").innerText = VT("✅ Đã lưu nháp!");
 };
 $("#dl").addEventListener("click", (e) => {
   if (e.target.dataset.done) {
@@ -362,16 +371,54 @@ drawDrafts();
 // =====================================================================
 
 // Giọng điệu cho chế độ "AI Soạn nhanh" (Trang trọng = giữ nguyên thư gốc)
+const QT = { // giọng điệu -> ngôn ngữ -> [lời chào thay "Kính gửi/Dear/お疲れ様です。", lời kết thay "Trân trọng,/Best regards,/敬具"]
+  friendly: { vi: ["Chào ", "Cảm ơn và thân mến,"], en: ["Hi ", "Many thanks,"], ja: ["こんにちは。", "ありがとうございます。"] },
+  respectful: { vi: ["Kính thưa ", "Kính chúc sức khỏe và thành công.\nKính thư,"], en: ["Respected ", "With sincere respect and gratitude,"], ja: ["謹んでご連絡申し上げます。", "心より感謝申し上げます。\n敬具"] },
+  casual: { vi: ["Hi ", "Thanks nhiều nhé,"], en: ["Hey ", "Thanks!"], ja: ["やあ、", "ありがとう！"] },
+  enthusiastic: { vi: ["Xin chào ", "Rất mong sớm nhận được phản hồi của bạn!"], en: ["Hello ", "Looking forward to hearing from you!"], ja: ["こんにちは！", "ご返信をお待ちしております！"] },
+  apologetic: { vi: ["Kính gửi ", "Em xin lỗi vì đã làm phiền và rất cảm ơn sự thông cảm.\nTrân trọng,"], en: ["Dear ", "I apologize for any inconvenience and truly appreciate your understanding.\nBest regards,"], ja: ["お忙しいところ恐れ入ります。", "ご迷惑をおかけし申し訳ありません。\n敬具"] },
+  urgent: { vi: ["Kính gửi ", "Rất mong nhận được phản hồi sớm.\nTrân trọng,"], en: ["Dear ", "I would appreciate your earliest reply.\nBest regards,"], ja: ["お急ぎで恐縮ですが、", "お早めのご返信をお願いいたします。\n敬具"] },
+};
 function applyQuickTone(body, lang) {
-  const sel = document.getElementById("qTone");
-  if (!sel || sel.value !== "friendly") return body;
-  const map = {
-    vi: [[/^Kính gửi /, "Chào "], [/Trân trọng,/, "Cảm ơn và thân mến,"]],
-    en: [[/^Dear /, "Hi "], [/Best regards,/, "Many thanks,"]],
-    ja: [],
-  };
-  return (map[lang] || []).reduce((t, [a, b]) => t.replace(a, b), body);
+  const sel = document.getElementById("qTone"), p = sel && QT[sel.value] && QT[sel.value][lang];
+  if (!p) return body;
+  const G = { vi: /^Kính gửi /, en: /^Dear /, ja: /お疲れ様です。/ }[lang], C = { vi: /Trân trọng,/, en: /Best regards,/, ja: /敬具/ }[lang];
+  return body.replace(G, p[0]).replace(C, p[1]);
 }
+const QTONES = [["formal", ["Trang trọng", "Formal", "丁寧・フォーマル"]], ["friendly", ["Thân thiện", "Friendly", "フレンドリー"]], ["respectful", ["Kính trọng", "Respectful", "敬意を込めて"]], ["casual", ["Thoải mái", "Casual", "カジュアル"]], ["enthusiastic", ["Nhiệt tình", "Enthusiastic", "熱意を込めて"]], ["apologetic", ["Nhẹ nhàng, xin lỗi", "Apologetic", "お詫びの気持ちで"]], ["urgent", ["Khẩn trương", "Urgent", "お急ぎで"]]];
+const QLANGS = [["vi", ["Tiếng Việt", "Vietnamese", "ベトナム語"]], ["en", ["Tiếng Anh", "English", "英語"]], ["ja", ["Tiếng Nhật", "Japanese", "日本語"]], ["ko", ["Tiếng Hàn", "Korean", "韓国語"]], ["zh-CN", ["Tiếng Trung (giản thể)", "Chinese (Simplified)", "中国語（簡体字）"]], ["zh-TW", ["Tiếng Trung (phồn thể)", "Chinese (Traditional)", "中国語（繁体字）"]], ["fr", ["Tiếng Pháp", "French", "フランス語"]], ["de", ["Tiếng Đức", "German", "ドイツ語"]], ["es", ["Tiếng Tây Ban Nha", "Spanish", "スペイン語"]], ["pt", ["Tiếng Bồ Đào Nha", "Portuguese", "ポルトガル語"]], ["it", ["Tiếng Ý", "Italian", "イタリア語"]], ["ru", ["Tiếng Nga", "Russian", "ロシア語"]], ["th", ["Tiếng Thái", "Thai", "タイ語"]], ["id", ["Tiếng Indonesia", "Indonesian", "インドネシア語"]], ["ar", ["Tiếng Ả Rập", "Arabic", "アラビア語"]], ["hi", ["Tiếng Hindi", "Hindi", "ヒンディー語"]]];
+const QTOPICS = [ // [id, icon, [nhãn VI, EN, JA], [câu mở đầu VI, EN, JA]]
+  ["nghi-hoc", "🎒", ["Xin nghỉ học / nghỉ làm", "Absence from school / work", "学校・仕事の欠席"], ["Em viết thư này để xin phép được nghỉ.", "I am writing to respectfully request an excused absence.", "欠席のお願いでご連絡いたしました。"]],
+  ["nop-tre", "⏰", ["Xin nộp bài trễ", "Late submission", "提出遅延のお願い"], ["Em viết thư này để xin phép được nộp bài trễ hạn.", "I am writing to kindly ask for permission to submit my work late.", "課題の提出が遅れることについてお願いしたくご連絡いたしました。"]],
+  ["gia-han", "⏳", ["Xin gia hạn thời hạn", "Deadline extension", "期限延長のお願い"], ["Em viết thư này để xin gia hạn thêm thời gian hoàn thành.", "I am writing to request an extension of the deadline.", "期限の延長をお願いしたくご連絡いたしました。"]],
+  ["ung-tuyen", "💼", ["Ứng tuyển / Xin thực tập", "Job application / Internship", "応募・インターン希望"], ["Em viết thư này để ứng tuyển / xin thực tập tại quý đơn vị.", "I am writing to apply for a position / internship at your organization.", "貴社への応募（インターン希望）のご連絡です。"]],
+  ["thu-gioi-thieu", "📝", ["Xin thư giới thiệu", "Recommendation letter", "推薦状のお願い"], ["Em viết thư này để kính xin một thư giới thiệu.", "I am writing to kindly ask for a letter of recommendation.", "推薦状を書いていただきたくご連絡いたしました。"]],
+  ["hoc-bong", "🎓", ["Xin xét học bổng", "Scholarship application", "奨学金の申請"], ["Em viết thư này để xin được xét học bổng.", "I am writing to apply for the scholarship.", "奨学金の申請についてご連絡いたしました。"]],
+  ["phuc-khao", "📊", ["Xin phúc khảo điểm", "Grade review request", "成績再確認のお願い"], ["Em viết thư này để xin được phúc khảo điểm bài thi.", "I am writing to request a review of my grade.", "成績の再確認をお願いしたくご連絡いたしました。"]],
+  ["xin-gap", "🤝", ["Xin hẹn gặp", "Meeting request", "面談のお願い"], ["Em viết thư này để xin hẹn một buổi gặp trao đổi.", "I am writing to request a meeting with you.", "面談のお時間をいただきたくご連絡いたしました。"]],
+  ["doi-lich", "📅", ["Xin đổi lịch", "Reschedule request", "日程変更のお願い"], ["Em viết thư này để xin đổi lịch hẹn.", "I am writing to ask whether we could reschedule.", "日程の変更をお願いしたくご連絡いたしました。"]],
+  ["tai-lieu", "📚", ["Xin tài liệu", "Request for materials", "資料のお願い"], ["Em viết thư này để xin được gửi tài liệu.", "I am writing to request some materials.", "資料をいただきたくご連絡いたしました。"]],
+  ["cam-on", "💐", ["Gửi lời cảm ơn", "Thank-you note", "お礼"], ["Em viết thư này để gửi lời cảm ơn chân thành.", "I am writing to express my sincere thanks.", "心より御礼申し上げたくご連絡いたしました。"]],
+  ["xin-loi", "🙏", ["Gửi lời xin lỗi", "Apology", "お詫び"], ["Em viết thư này để xin lỗi về sự việc vừa qua.", "I am writing to sincerely apologize for what happened.", "このたびの件につきお詫びを申し上げたくご連絡いたしました。"]],
+  ["nghi-viec", "🚪", ["Xin nghỉ việc", "Resignation", "退職のご連絡"], ["Em viết thư này để thông báo nguyện vọng nghỉ việc.", "I am writing to formally notify you of my resignation.", "退職のご意向をお伝えしたくご連絡いたしました。"]],
+  ["nhac-lai", "🔔", ["Nhắc lại email chưa phản hồi", "Follow-up on no reply", "返信のお願い（再送）"], ["Em viết thư này để hỏi thăm về email em đã gửi trước đó.", "I am writing to follow up on my earlier email.", "先日お送りしたメールについてご連絡いたしました。"]],
+  ["khac", "✉️", ["Khác (Liên hệ chung)", "Other (general contact)", "その他（一般連絡）"], ["Em viết thư này để liên hệ với quý Thầy/Cô.", "I am writing to get in touch with you.", "ご連絡させていただきました。"]],
+];
+function quickGeneric(topic, lang, name, teacher, sid, maj, details) {
+  const T = QTOPICS.find((x) => x[0] === topic) || QTOPICS[QTOPICS.length - 1], i = { vi: 0, en: 1, ja: 2 }[lang];
+  const idLabel = ["MSSV: ", "ID: ", "学籍番号: "][i];
+  const s = `[${T[2][i].toUpperCase()}] - ${name} - ${idLabel}${sid}`;
+  const b = [
+    `Kính gửi ${teacher},\n\nEm tên là: ${name}\nMã số SV: ${sid}\nLớp/Ngành: ${maj}\n\n${T[3][0]}\nNội dung: ${details}\n\nEm xin chân thành cảm ơn.\n\nTrân trọng,\n${name}`,
+    `Dear ${teacher},\n\nMy name is ${name}, Student ID: ${sid}, Major: ${maj}.\n\n${T[3][1]}\nDetails: ${details}\n\nThank you for your time and consideration.\n\nBest regards,\n${name}`,
+    `${teacher} 先生\n\nお疲れ様です。\n${maj}の ${name}（学籍番号: ${sid}）です。\n\n${T[3][2]}\n内容：${details}\n\nよろしくお願いいたします。\n\n敬具\n${name}`,
+  ][i];
+  return { s, b };
+}
+async function translateLines(text, to) { // MyMemory giới hạn ~500 ký tự/lần nên dịch từng dòng
+  return (await Promise.all(text.split("\n").map((l) => (l.trim() ? translateText(l, to, "en") : l)))).join("\n");
+}
+
 
 (() => {
   "use strict";
@@ -408,9 +455,6 @@ function applyQuickTone(body, lang) {
     achievements: f("Thành tích nổi bật", "Key achievements", "GPA 3.6/4, nhóm đạt điểm cao nhất đồ án cuối kỳ, 2 năm trong CLB sinh viên", "GPA 3.6/4, top project in the class, 2 years in the student club"),
     originalSubject: f("Tiêu đề email đã gửi", "Original subject", "Xin gia hạn nộp bài Giải tích 1", "Extension request for Calculus 1"),
     sentDate: f("Ngày đã gửi", "Date sent", "05/03/2026", "March 5, 2026"),
-  };
-  const JA_FIELDS = {
-    recipient: "宛先", sender: "あなたの氏名", senderInfo: "あなたの情報（クラス、学生番号、役職）", course: "科目名", date: "日付", reason: "理由", handover: "引き継ぎ計画", position: "応募職種", company: "会社・組織", highlights: "主な強み", major: "専攻", duration: "インターン期間", deadline: "締め切り", newDate: "希望する新しい期限", lastDay: "最終勤務日", purpose: "目的（奨学金、プログラムなど）", achievements: "主な実績", originalSubject: "送信済みメールの件名", sentDate: "送信日"
   };
   const COMMON_KEYS = ["recipient", "sender", "senderInfo"];
   const AREA_KEYS = new Set(["reason", "handover", "highlights", "achievements"]);
@@ -490,6 +534,12 @@ function applyQuickTone(body, lang) {
   const UI = {
     "nav.compose": ["✉️ Soạn email", "✉️ Compose"], "nav.drafts": ["⏰ Nháp & nhắc nhở", "⏰ Drafts & reminders"],
     "nav.community": ["💌 Diễn đàn mẫu", "💌 Community"], "nav.admin": ["🔐 Quản trị", "🔐 Admin"],
+    "nav.developers": ["👥 Các nhà phát triển", "👥 Developers"], "dev.title": ["Đội ngũ MailMate", "The MailMate team"], "nav.upgrade": ["💎 Nâng cấp", "💎 Upgrade"],
+    "footer.product": ["MailMate", "MailMate"], "footer.features": ["Tính năng", "Features"], "footer.compose": ["Soạn email", "Compose email"], "footer.community": ["Diễn đàn mẫu", "Email examples"], "footer.support": ["Hỗ trợ", "Support"], "footer.reviews": ["Đánh giá", "Reviews"], "footer.note": ["Được tạo để giúp mỗi email trở nên rõ ràng hơn.", "Built to make every email clearer."],
+    "features.eyebrow": ["MỌI THỨ BẠN CẦN ĐỂ VIẾT TỐT HƠN", "EVERYTHING YOU NEED TO WRITE BETTER"], "features.title": ["Một không gian nhỏ, nhiều trợ giúp thiết thực.", "One thoughtful space, practical help at every step."], "features.copy": ["Từ email đầu tiên đến việc theo dõi phản hồi, MailMate giúp bạn sắp xếp lời nói và công việc rõ ràng hơn.", "From the first draft to following up, MailMate helps you communicate clearly and stay organized."], "features.composeTitle": ["Soạn email theo từng bước", "Step-by-step email writing"], "features.composeCopy": ["Chọn chủ đề, giọng điệu và điền thông tin để tạo bản nháp có cấu trúc rõ ràng.", "Choose a topic and tone, then fill in details to create a clear, structured draft."], "features.draftsTitle": ["Nháp và nhắc nhở", "Drafts and reminders"], "features.draftsCopy": ["Lưu email chưa gửi, đặt lịch nhắc và theo dõi việc cần làm tiếp theo.", "Save unsent emails, schedule reminders, and keep track of what comes next."], "features.communityTitle": ["Mẫu thư và góp ý cộng đồng", "Email examples and community feedback"], "features.communityCopy": ["Tham khảo ví dụ, chia sẻ kinh nghiệm và học cách viết phù hợp với từng tình huống.", "Explore examples, share experiences, and learn how to write for different situations."], "features.cta": ["Bắt đầu viết email ↘", "Start writing an email ↘"], "settings.title": ["Cài đặt", "Settings"], "settings.copy": ["Tùy chỉnh trải nghiệm của bạn.", "Customize your experience."], "settings.language": ["Ngôn ngữ giao diện", "Interface language"], "settings.time": ["Thời gian và vị trí", "Time and location"], "settings.timezone": ["Múi giờ", "Time zone"], "settings.location": ["Tên vị trí hiển thị", "Location label"], "settings.format": ["Định dạng giờ", "Time format"], "settings.timeHint": ["Bạn có thể đổi múi giờ hiển thị; đồng hồ không thay đổi giờ hệ thống của thiết bị.", "You can change the displayed time zone; this does not change your device's system clock."], "settings.save": ["Lưu cài đặt", "Save settings"], "settings.account": ["Tài khoản", "Account"], "settings.accountCopy": ["Đăng xuất khỏi phiên quản trị trên thiết bị này.", "Sign out of the admin session on this device."], "settings.logout": ["Đăng xuất quản trị", "Sign out of admin"] ,
+    "hero.eyebrow": ["TRỢ LÝ EMAIL CỦA BẠN", "YOUR EMAIL WRITING COMPANION"], "hero.title": ["Viết email tốt hơn. Tự tin hơn.", "Write better emails. Feel more confident."], "hero.copy": ["Biến ý tưởng thành những email rõ ràng, chuyên nghiệp chỉ trong vài bước.", "Turn your ideas into clear, professional emails in just a few steps."], "hero.try": ["Try on web ↘", "Try on web ↘"], "hero.learn": ["Khám phá tính năng", "Explore features"], "hero.caption": ["Không gian viết thư dành cho sinh viên và người đi làm", "A thoughtful writing space for students and professionals"], "hero.trusted": ["Được nhiều đội ngũ hàng đầu tin tưởng", "Trusted by teams building what’s next"], "hero.disclaimer": ["Logo minh họa giao diện — không hàm ý hợp tác hoặc chứng thực chính thức.", "Illustrative logos for interface design only; no official affiliation or endorsement implied."],
+    "clock.live": ["GIỜ ĐỊA PHƯƠNG · TRỰC TIẾP", "LIVE LOCAL TIME"], "clock.title": ["Một nhịp dừng giữa những email", "A mindful pause between emails"], "clock.copy": ["Thời gian đang trôi — hãy dành một phút để viết điều bạn muốn nói thật rõ ràng.", "Time keeps moving — take a moment to say what you mean, clearly."],
+    "upgrade.eyebrow": ["THÀNH VIÊN MAILMATE", "MAILMATE MEMBERSHIP"], "upgrade.title": ["Chọn không gian viết của bạn", "Choose your writing space"], "upgrade.copy": ["Bắt đầu miễn phí hoặc chọn gói phù hợp với nhu cầu.", "Start for free or choose a plan that fits your needs."], "upgrade.free1": ["Mẫu email cơ bản", "Essential email templates"], "upgrade.free2": ["Lưu nháp trên trình duyệt", "Save drafts in your browser"], "upgrade.go1": ["Quy trình viết mở rộng", "Expanded writing workflow"], "upgrade.go2": ["Hỗ trợ dự án MailMate", "Support the MailMate project"], "upgrade.pro1": ["Trải nghiệm nâng cao", "Enhanced experience"], "upgrade.pro2": ["Ủng hộ phát triển MailMate", "Support MailMate development"], "upgrade.freeBtn": ["Dùng miễn phí", "Use Free"], "upgrade.goBtn": ["Chọn Go", "Choose Go"], "upgrade.proBtn": ["Chọn Pro", "Choose Pro"], "upgrade.secure": ["THANH TOÁN", "PAYMENT"], "upgrade.qrCopy": ["Quét mã QR bằng ứng dụng ngân hàng. Hãy kiểm tra thông tin trước khi xác nhận.", "Scan the QR code with your banking app. Check the details before confirming."], "upgrade.qrNote": ["Website chưa tự động xác minh giao dịch. Vui lòng liên hệ quản trị viên sau khi thanh toán.", "Payments are not automatically verified yet. Please contact the administrator after paying."],
     "g.save": ["Lưu", "Save"], "g.cancel": ["Hủy", "Cancel"], "g.close": ["Đóng", "Close"],
     "err.storage": ["Không lưu được dữ liệu. Bộ nhớ trình duyệt có thể đã đầy hoặc bị chặn.", "Could not save data. Browser storage may be full or blocked."],
     "c.modeQuick": ["⚡ AI soạn nhanh", "⚡ Quick AI compose"], "c.modeTpl": ["🧩 Soạn theo chủ đề mẫu", "🧩 Compose from templates"],
@@ -552,40 +602,8 @@ function applyQuickTone(body, lang) {
     "a.confirmWipe": ["Xóa toàn bộ nháp mẫu, bài đăng và cài đặt quản trị? Không thể hoàn tác.", "Erase all template drafts, posts and admin settings? This cannot be undone."],
   };
 
-  Object.entries({"nav.compose": "✉️ メール作成", "nav.drafts": "⏰ 下書き＆リマインド", "nav.community": "💌 テンプレ広場", "nav.admin": "🔐 管理", "g.save": "保存", "g.cancel": "キャンセル", "g.close": "閉じる", "c.modeQuick": "⚡ AIクイック作成", "c.modeTpl": "🧩 テンプレから作成", "c.step1": "1. トピックを選ぶ", "c.step2": "2. トーンと言語", "c.step3": "3. 情報を入力", "c.tone": "トーン", "c.formal": "丁寧", "c.friendly": "フレンドリー", "c.mailLang": "メールの言語", "c.both": "バイリンガル (VI + EN)", "c.sample": "例を入力", "c.reset": "やり直す", "c.result": "あなたのメール", "c.copy": "📋 コピー", "c.mailto": "✉️ メールアプリで開く", "c.save": "💾 下書き保存", "c.share": "💌 広場に共有", "c.subject": "件名", "c.body": "本文", "d.title": "下書き＆リマインド", "d.fPending": "未送信", "d.fSent": "送信済み", "d.fAll": "すべて", "d.edit": "編集を続ける", "d.send": "送信画面を開く", "d.markSent": "送信済みにする", "d.remind": "リマインド設定", "d.delete": "削除", "d.alert": "期限のリマインドが {n} 件あります", "d.alertBtn": "見る", "d.notifyTitle": "メール送信の時間です", "r.title": "このメールのリマインド", "r.none": "通知なし", "m.title": "テンプレ広場 💌", "m.post": "投稿する", "m.sortNew": "新着順", "m.sortTop": "人気順", "m.allTopics": "すべてのトピック", "a.title": "管理エリア"}).forEach(([k, v]) => UI[k] && (UI[k][2] = v));
-  Object.assign(UI, {"isl.snooze": ["Hoãn 10 phút", "Snooze 10 min", "10分後に再通知"], "isl.demo": ["Email xin nghỉ học (thử)", "Absence email (preview)", "欠席メール（テスト）"], "isl.big": ["Tệp quá lớn (tối đa 2MB)", "File too large (max 2MB)", "ファイルが大きすぎます（最大2MB）"], "rv.title": ["Khách hàng nói gì về MailMate", "What users say about MailMate", "利用者の声"], "rv.all": ["Tất cả", "All", "すべて"], "rv.pos": ["Tích cực", "Positive", "良い評価"], "rv.neg": ["Cần cải thiện", "Needs work", "改善点"], "rv.note": ["Góp ý minh họa (dữ liệu demo, nhân vật hư cấu).", "Sample feedback (demo data, fictional users).", "サンプルのフィードバック（デモ用・架空のユーザー）"]});
-
-
-  // Bản dịch bổ sung cho các phần giao diện, đánh giá và gói nâng cấp.
-  Object.assign(UI, {
-    "nav.pro": ["💎 Nâng cấp", "💎 Upgrade", "💎 アップグレード"],
-    "hello.title": ["Chào bạn, mình là MailMate ✨", "Hi, I'm MailMate ✨", "こんにちは、MailMateです ✨"],
-    "hello.lead": ["Mình là người trợ lý thân thiết của bạn.<br>Hôm nay mình có thể giúp gì cho bạn đây?", "Your friendly writing assistant.<br>How can I help you today?", "あなたの文章作成アシスタントです。<br>今日は何をお手伝いしましょうか？"],
-    "hello.start": ["Bắt đầu soạn thư", "Start writing", "メール作成を始める"],
-    "site.lead": ["Hôm nay mình có thể giúp gì cho bạn? Điền thông tin bên dưới hoặc tham khảo diễn đàn, mình sẽ soạn email hoàn chỉnh để bạn gửi.", "What can I help you write today? Fill in the details or browse the community to create a polished email.", "今日はどのようなメールを作成しますか？情報を入力するか、コミュニティの例を参考にしてください。"],
-    "quick.info": ["Thông tin & Cấu hình", "Details & settings", "情報と設定"], "quick.generate": ["✨ AI Soạn Email Ngay", "✨ Generate Email with AI", "✨ AIでメールを作成"], "quick.generating": ["⏳ AI đang dịch và tạo thư...", "⏳ Translating and generating your email...", "⏳ 翻訳してメールを作成中…"], "quick.created": ["✅ Đã tạo thư thành công!", "✅ Email created successfully!", "✅ メールを作成しました！"], "quick.copied": ["✅ Đã sao chép vào khay nhớ tạm.", "✅ Copied to clipboard.", "✅ クリップボードにコピーしました。"], "quick.saved": ["✅ Đã lưu nháp!", "✅ Draft saved!", "✅ 下書きを保存しました！"], "quick.topic": ["Chủ đề email", "Email topic", "メールのトピック"],
-    "quick.topicLeave": ["Xin nghỉ học / nghỉ làm", "Absence from school / work", "学校・仕事の欠席連絡"], "quick.topicLate": ["Xin nộp bài trễ", "Request an extension", "提出期限の延長依頼"], "quick.topicJob": ["Ứng tuyển / Xin thực tập", "Job / internship application", "就職・インターン応募"], "quick.topicOther": ["Khác (Liên hệ chung)", "Other (general inquiry)", "その他（一般的な問い合わせ）"],
-    "quick.recipient": ["Tên giảng viên / người nhận", "Recipient / instructor name", "先生・宛先の名前"], "quick.yourName": ["Họ và tên của bạn", "Your full name", "あなたの氏名"], "quick.email": ["Email người nhận", "Recipient email", "宛先のメールアドレス"], "quick.studentId": ["Mã số sinh viên", "Student ID", "学生番号"], "quick.class": ["Lớp / Ngành", "Class / Major", "クラス・専攻"], "quick.remember": ["Trình duyệt sẽ tự động nhớ thông tin của bạn cho lần sau.", "Your browser will remember these details for next time.", "入力内容は次回のためにブラウザーに保存されます。"], "quick.reason": ["Lý do chi tiết", "Detailed reason", "詳しい理由"], "quick.targetLang": ["Ngôn ngữ đầu ra", "Output language", "出力言語"], "quick.empty": ["Email của bạn sẽ hiện ở đây. Bạn có thể sửa trực tiếp.", "Your email will appear here. You can edit it directly.", "作成したメールがここに表示され、直接編集できます。"], "quick.to": ["Đến (email)", "To (email)", "宛先（メール）"], "quick.gmail": ["🚀 Gửi qua Gmail ➜", "🚀 Continue in Gmail ➜", "🚀 Gmailで開く ➜"],
-    "quick.phRecipient": ["VD: Thầy Shin", "e.g. Professor Smith", "例：田中先生"], "quick.phName": ["VD: Nguyễn Văn A", "e.g. Alex Nguyen", "例：山田太郎"], "quick.phEmail": ["Email người nhận", "Recipient email address", "宛先メールアドレス"], "quick.phId": ["VD: 21110123", "e.g. 21110123", "例：21110123"], "quick.phClass": ["VD: 12C3 / CNTT", "e.g. Class 12C3 / IT", "例：情報工学科"], "quick.phReason": ["VD: Em bị sốt từ đêm qua, không thể đi học...", "e.g. I have had a fever since last night...", "例：昨夜から熱があり、授業に出席できません…"],
-    "lang.vi": ["Tiếng Việt", "Vietnamese", "ベトナム語"], "lang.en": ["Tiếng Anh", "English", "英語"], "lang.ja": ["Tiếng Nhật", "Japanese", "日本語"],
-    "d.unfinished": ["Nháp chưa gửi", "Unsent drafts", "未送信の下書き"], "d.emptyQuick": ["Chưa có nháp nào.", "No drafts yet.", "下書きはまだありません。"],
-    "ring.chime": ["Chuông ngân", "Chime", "チャイム"], "ring.marimba": ["Marimba", "Marimba", "マリンバ"], "ring.pulse": ["Xung điện tử", "Electronic pulse", "電子パルス"], "ring.classic": ["Báo thức", "Alarm", "アラーム"], "ring.iphone": ["Thông báo iPhone", "iPhone notification", "iPhone通知音"], "ring.newtone": ["Nhạc chuông mới", "New ringtone", "新しい着信音"], "ring.test": ["▶ Nghe thử", "▶ Preview", "▶ 試聴"], "ring.add": ["＋ Thêm nhạc", "＋ Add audio", "＋ 音声を追加"], "ring.delete": ["🗑 Xóa nhạc", "🗑 Remove audio", "🗑 音声を削除"], "ring.note": ["Bạn có thể thêm nhiều file âm thanh từ máy tính. Nhạc được lưu trong trình duyệt hiện tại.", "Add audio files from your computer. Custom audio is saved in this browser only.", "パソコンから音声ファイルを追加できます。追加した音声はこのブラウザーに保存されます。"],
-    "fb.title": ["Đóng góp ý kiến về MailMate", "Share your feedback about MailMate", "MailMateへのフィードバック"], "fb.lead": ["Chia sẻ trải nghiệm thực tế, đánh giá số sao và đề xuất cải thiện.", "Tell us about your experience, rate the site, and suggest improvements.", "使ってみた感想、星評価、改善案をお寄せください。"], "fb.name": ["Tên hiển thị (không bắt buộc)", "Display name (optional)", "表示名（任意）"], "fb.rating": ["Đánh giá của bạn", "Your rating", "評価"], "fb.comment": ["Ý kiến đóng góp", "Your feedback", "ご意見"], "fb.submit": ["Gửi đánh giá", "Submit feedback", "フィードバックを送信"], "fb.phName": ["Tên của bạn", "Your name", "お名前"], "fb.phComment": ["Bạn thích điểm nào? Điều gì nên cải thiện?", "What did you like? What could be improved?", "良かった点や改善してほしい点を教えてください。"], "fb.thanks": ["Cảm ơn bạn đã đóng góp ý kiến!", "Thanks for your feedback!", "ご意見ありがとうございます！"], "fb.required": ["Vui lòng chọn số sao và nhập ý kiến.", "Please choose a star rating and enter your feedback.", "星評価を選び、コメントを入力してください。"], "fb.user": ["Người dùng", "User", "ユーザー"], "fb.userReview": ["Đánh giá của người dùng", "User review", "ユーザー評価"],
-    "pro.kicker": ["MAILMATE MEMBERSHIP", "MAILMATE MEMBERSHIP", "MAILMATE メンバーシップ"], "pro.title": ["Nâng cấp trải nghiệm viết email", "Upgrade your email-writing experience", "メール作成体験をアップグレード"], "pro.lead": ["Chọn gói phù hợp với bạn. Đây là giao diện minh họa; chưa có thanh toán tự động.", "Choose a plan that suits you. This is a demo page; automatic payment is not connected.", "用途に合ったプランを選択してください。これはデモ画面で、自動決済には接続されていません。"], "pro.forever": ["/ mãi mãi", "/ forever", "/ 永久"], "pro.month": ["/ tháng", "/ month", "/ 月"], "pro.free1": ["Mẫu email cơ bản", "Basic email templates", "基本メールテンプレート"], "pro.free2": ["Lưu nháp trên thiết bị", "Save drafts on this device", "この端末に下書きを保存"], "pro.free3": ["Cộng đồng chia sẻ", "Community sharing", "コミュニティ共有"], "pro.current": ["Gói hiện tại", "Current plan", "現在のプラン"], "pro.go1": ["Nhiều mẫu email hơn", "More email templates", "メールテンプレートを追加"], "pro.go2": ["Tùy chỉnh giao diện", "Interface customization", "画面のカスタマイズ"], "pro.go3": ["Quản lý nhắc nhở nâng cao", "Advanced reminder management", "リマインダー管理の強化"], "pro.chooseGo": ["Chọn MailMate Go", "Choose MailMate Go", "MailMate Goを選択"], "pro.pro1": ["Trải nghiệm đầy đủ tính năng", "Full feature experience", "すべての機能を体験"], "pro.pro2": ["Bộ mẫu chuyên nghiệp", "Professional template library", "プロ向けテンプレート集"], "pro.pro3": ["Ưu tiên tính năng mới", "Early access to new features", "新機能への先行アクセス"], "pro.choosePro": ["Nâng cấp Pro", "Upgrade to Pro", "Proにアップグレード"], "pay.title": ["Thanh toán gói", "Plan payment", "プランのお支払い"], "pay.note": ["Mã QR bên dưới chỉ là hình minh họa. Hãy thay bằng QR thanh toán thật của bạn trước khi công khai.", "The QR below is only a placeholder. Replace it with your real payment QR before publishing.", "下のQRコードは仮の画像です。公開前に実際の決済QRコードに差し替えてください。"], "pay.placeholder": ["QR MINH HỌA", "DEMO QR", "QRデモ"], "pay.selected": ["Gói đã chọn", "Selected plan", "選択中のプラン"],
-    "rv.title": ["Người dùng nói gì về MailMate", "What users say about MailMate", "MailMateへのユーザーの声"], "rv.all": ["Tất cả", "All", "すべて"], "rv.pos": ["Tích cực", "Positive", "良い評価"], "rv.neg": ["Cần cải thiện", "Needs improvement", "改善点"], "rv.note": ["Các đánh giá minh họa được ghi rõ là dữ liệu demo; ý kiến gửi qua biểu mẫu sẽ lưu trên trình duyệt này.", "Demo reviews are labeled as examples. Feedback submitted here is stored in this browser only.", "サンプル評価はデモと明記されています。フォームからの意見はこのブラウザー内に保存されます。"],
-    "nav.compose": ["✉️ Soạn email", "✉️ Compose", "✉️ メール作成"], "nav.drafts": ["⏰ Nháp & nhắc nhở", "⏰ Drafts & reminders", "⏰ 下書き＆リマインド"], "nav.community": ["💌 Diễn đàn mẫu", "💌 Community", "💌 コミュニティ"], "nav.admin": ["🔐 Quản trị", "🔐 Admin", "🔐 管理"],
-    "c.modeQuick": ["⚡ AI soạn nhanh", "⚡ Quick AI compose", "⚡ AIクイック作成"], "c.modeTpl": ["🧩 Soạn theo chủ đề mẫu", "🧩 Compose from templates", "🧩 テンプレートから作成"], "c.step1": ["1. Chọn chủ đề", "1. Choose a topic", "1. トピックを選ぶ"], "c.step2": ["2. Giọng điệu & ngôn ngữ", "2. Tone & language", "2. トーンと言語"], "c.step3": ["3. Điền thông tin", "3. Fill in the details", "3. 情報を入力"], "c.tone": ["Giọng điệu", "Tone", "トーン"], "c.formal": ["Trang trọng", "Formal", "丁寧"], "c.friendly": ["Thân thiện", "Friendly", "フレンドリー"], "c.mailLang": ["Ngôn ngữ email", "Email language", "メールの言語"], "c.both": ["Song ngữ (VI + EN)", "Bilingual (VI + EN)", "バイリンガル (VI + EN)"], "c.sample": ["Điền ví dụ", "Fill with an example", "例を入力"], "c.reset": ["Làm lại", "Start over", "やり直す"], "c.result": ["Bản thư của bạn", "Your email", "あなたのメール"], "c.copy": ["📋 Sao chép", "📋 Copy", "📋 コピー"], "c.save": ["💾 Lưu nháp", "💾 Save draft", "💾 下書き保存"], "c.share": ["💌 Chia sẻ lên diễn đàn", "💌 Share to community", "💌 コミュニティに共有"], "c.subject": ["Tiêu đề", "Subject", "件名"], "c.body": ["Nội dung", "Body", "本文"], "d.title": ["Nháp & nhắc nhở", "Drafts & reminders", "下書き＆リマインド"], "d.lead": ["Email chưa gửi sẽ được nhắc đúng giờ bạn chọn, để không bỏ sót thư quan trọng.", "Get reminders for unsent emails at the time you choose.", "未送信メールを指定した時間にリマインドします。"], "d.fPending": ["Chưa gửi", "Unsent", "未送信"], "d.fSent": ["Đã gửi", "Sent", "送信済み"], "d.fAll": ["Tất cả", "All", "すべて"], "m.title": ["Diễn đàn mẫu email 💌", "Email template community 💌", "メールテンプレート広場 💌"], "m.lead": ["Xem thư của người khác, dùng làm mẫu và góp ý để cùng viết tốt hơn.", "Browse email examples, reuse templates, and share feedback.", "他のメール例を参考にし、意見を共有しましょう。"], "a.title": ["Khu vực quản trị", "Admin area", "管理エリア"]
-  });
-
-
-  Object.assign(UI, {
-    "g.save": ["Lưu", "Save", "保存"], "g.cancel": ["Hủy", "Cancel", "キャンセル"], "g.close": ["Đóng", "Close", "閉じる"],
-    "err.storage": ["Không lưu được dữ liệu. Bộ nhớ trình duyệt có thể đã đầy hoặc bị chặn.", "Could not save data. Browser storage may be full or blocked.", "データを保存できません。ブラウザーの保存領域がいっぱいか、制限されている可能性があります。"],
-    "c.bilingualHint": ["Thông tin bạn nhập được giữ nguyên ở cả hai bản.", "Your details are kept in both versions.", "入力した情報は両方の言語版に保持されます。"], "c.edited": ["Đã chỉnh tay", "Edited by hand", "手動で編集済み"], "c.regen": ["Soạn lại từ mẫu", "Rewrite from template", "テンプレートから再作成"], "c.missing": ["Còn {n} mục chưa điền, chúng hiện trong ngoặc vuông.", "{n} fields still empty. They show in square brackets.", "未入力の項目が {n} 件あります。角括弧で表示されます。"], "c.complete": ["Đã đủ thông tin, bạn có thể gửi.", "All details filled in. Ready to send.", "必要な情報が入力されました。送信できます。"], "c.copied": ["Đã sao chép email", "Email copied", "メールをコピーしました"], "c.editingDraft": ["Đang sửa bản nháp", "Editing a draft", "下書きを編集中"], "c.noTopics": ["Chưa có chủ đề nào.", "No topics yet.", "トピックがまだありません。"],
-    "d.empty": ["Chưa có bản nháp nào.", "No drafts yet.", "下書きはまだありません。"], "d.edit": ["Soạn tiếp", "Keep editing", "編集を続ける"], "d.send": ["Mở mail để gửi", "Open to send", "メールを開いて送信"], "d.markSent": ["Đã gửi", "Mark sent", "送信済みにする"], "d.markUnsent": ["Chưa gửi", "Mark unsent", "未送信に戻す"], "d.remind": ["Đặt nhắc", "Set reminder", "リマインダーを設定"], "d.delete": ["Xóa", "Delete", "削除"], "d.noRemind": ["Chưa đặt nhắc", "No reminder", "リマインダー未設定"], "d.saved": ["Đã lưu nháp", "Draft saved", "下書きを保存しました"],
-    "m.search": ["Tìm email mẫu…", "Search email examples…", "メール例を検索…"], "m.sortNew": ["Mới nhất", "Newest", "新着順"], "m.sortTop": ["Phổ biến", "Popular", "人気順"], "m.post": ["＋ Đăng email mẫu", "＋ Share an email", "＋ メール例を投稿"], "m.allTopics": ["Tất cả chủ đề", "All topics", "すべてのトピック"], "m.privacy": ["Không đăng thông tin cá nhân hoặc dữ liệu nhạy cảm.", "Do not post personal or sensitive information.", "個人情報や機密情報を投稿しないでください。"], "m.postTitle": ["Tiêu đề bài đăng", "Post title", "投稿タイトル"], "m.topic": ["Chủ đề", "Topic", "トピック"], "m.lang": ["Ngôn ngữ", "Language", "言語"], "m.author": ["Tên hiển thị (tùy chọn)", "Display name (optional)", "表示名（任意）"], "m.submit": ["Đăng bài", "Publish", "投稿する"], "m.used": ["Đã nạp mẫu vào trình soạn thảo", "Template loaded into the editor", "テンプレートをエディターに読み込みました"],
-    "a.gate": ["Nhập mã PIN để quản lý chủ đề, bài đăng và cài đặt.", "Enter the PIN to manage topics, posts and settings.", "トピック、投稿、設定を管理するにはPINを入力してください。"], "a.pin": ["Mã PIN", "PIN", "PINコード"], "a.login": ["Đăng nhập", "Sign in", "ログイン"], "a.wrongPin": ["Sai mã PIN, hãy thử lại.", "Wrong PIN, please try again.", "PINが違います。もう一度お試しください。"], "a.logout": ["Đăng xuất", "Sign out", "ログアウト"], "a.tabSettings": ["Cài đặt", "Settings", "設定"], "a.tabTopics": ["Chủ đề & mẫu", "Topics & templates", "トピックとテンプレート"], "a.tabPosts": ["Kiểm duyệt", "Moderation", "投稿の管理"], "a.tabData": ["Dữ liệu", "Data", "データ"], "a.siteName": ["Tên trang", "Site name", "サイト名"], "a.defUi": ["Ngôn ngữ giao diện mặc định", "Default interface language", "既定の表示言語"], "a.defMail": ["Ngôn ngữ email mặc định", "Default email language", "既定のメール言語"], "a.defTone": ["Giọng điệu mặc định", "Default tone", "既定のトーン"], "a.autoRemind": ["Tự đặt nhắc sau (giờ, 0 = tắt)", "Auto-remind after (hours, 0 = off)", "自動リマインドまでの時間（時間、0で無効）"], "a.moderation": ["Duyệt bài trước khi hiển thị công khai", "Approve posts before they appear", "公開前に投稿を承認する"], "a.allowComments": ["Cho phép góp ý dưới bài đăng", "Allow feedback on posts", "投稿へのコメントを許可"], "a.newPin": ["Đổi mã PIN (bỏ trống nếu giữ nguyên)", "Change PIN (leave empty to keep)", "PINを変更（変更しない場合は空欄）"], "a.saved": ["Đã lưu cài đặt", "Settings saved", "設定を保存しました"], "a.addTopic": ["Thêm chủ đề", "Add topic", "トピックを追加"], "a.resetTopics": ["Khôi phục chủ đề mặc định", "Restore default topics", "既定のトピックに戻す"], "a.edit": ["Sửa", "Edit", "編集"], "a.delete": ["Xóa", "Delete", "削除"], "a.approve": ["Duyệt", "Approve", "承認"], "a.statusPending": ["Chờ duyệt", "Pending", "承認待ち"], "a.statusLive": ["Đang hiển thị", "Live", "公開中"], "a.noPosts": ["Chưa có bài đăng nào.", "No posts yet.", "投稿はまだありません。"], "a.topicNew": ["Thêm chủ đề mới", "New topic", "新しいトピック"], "a.topicEdit": ["Sửa chủ đề", "Edit topic", "トピックを編集"], "a.topicSaved": ["Đã lưu chủ đề", "Topic saved", "トピックを保存しました"], "a.icon": ["Biểu tượng (emoji)", "Icon (emoji)", "アイコン（絵文字）"], "a.nameVi": ["Tên chủ đề (VI)", "Topic name (VI)", "トピック名（ベトナム語）"], "a.nameEn": ["Tên chủ đề (EN)", "Topic name (EN)", "トピック名（英語）"], "a.subjVi": ["Tiêu đề mẫu (VI)", "Subject template (VI)", "件名テンプレート（ベトナム語）"], "a.subjEn": ["Tiêu đề mẫu (EN)", "Subject template (EN)", "件名テンプレート（英語）"], "a.bodyVi": ["Nội dung mẫu (VI)", "Body template (VI)", "本文テンプレート（ベトナム語）"], "a.bodyEn": ["Nội dung mẫu (EN)", "Body template (EN)", "本文テンプレート（英語）"], "a.export": ["Xuất dữ liệu (.json)", "Export data (.json)", "データをエクスポート（.json）"], "a.import": ["Nhập dữ liệu", "Import data", "データをインポート"], "a.imported": ["Đã nhập dữ liệu", "Data imported", "データをインポートしました"], "a.badFile": ["Tệp không hợp lệ.", "Invalid file.", "無効なファイルです。"], "a.wipe": ["Xóa dữ liệu mở rộng", "Erase extension data", "追加データを消去"]
-  });
+  Object.entries({"nav.compose": "✉️ メール作成", "nav.drafts": "⏰ 下書き＆リマインド", "nav.community": "💌 テンプレ広場", "nav.admin": "🔐 管理", "nav.developers": "👥 開発チーム", "dev.title": "MailMate チーム", "nav.upgrade": "💎 アップグレード", "features.eyebrow":"より良いメールを書くために", "features.title":"ひとつの場所に、実用的なサポートを。", "features.copy":"最初の下書きから返信のフォローアップまで、MailMate が明確なコミュニケーションを支援します。", "features.composeTitle":"ステップごとのメール作成", "features.composeCopy":"トピックとトーンを選び、情報を入力して構成の整った下書きを作成します。", "features.draftsTitle":"下書きとリマインダー", "features.draftsCopy":"未送信メールを保存し、リマインダーを設定して次の作業を管理します。", "features.communityTitle":"メール例とコミュニティの意見", "features.communityCopy":"例を参考にし、経験を共有し、状況に合った書き方を学びましょう。", "features.cta":"メール作成を始める ↘", "settings.title":"設定", "settings.copy":"使い方をカスタマイズします。", "settings.language":"表示言語", "settings.time":"時刻と場所", "settings.timezone":"タイムゾーン", "settings.location":"表示する場所", "settings.format":"時刻形式", "settings.timeHint":"表示するタイムゾーンを変更できます。端末のシステム時刻は変更されません。", "settings.save":"設定を保存", "settings.account":"アカウント", "settings.accountCopy":"この端末の管理者セッションからログアウトします。", "settings.logout":"管理者からログアウト", "hero.eyebrow": "あなたのメール作成アシスタント", "hero.title": "もっと良いメールを。もっと自信を。", "hero.copy": "アイデアを、わずか数ステップで明確でプロフェッショナルなメールに。", "hero.try": "Try on web ↘", "hero.learn": "機能を見る", "hero.caption": "学生と社会人のためのメール作成スペース", "hero.trusted": "多くのチームに信頼されています", "hero.disclaimer": "ロゴはデザイン見本です。公式な提携・推薦を示すものではありません。", "clock.live": "リアルタイム現地時刻", "clock.title": "メールの合間にひと呼吸", "clock.copy": "時間は流れています。伝えたいことを明確に書く時間を少し取りましょう。", "upgrade.eyebrow": "MAILMATE メンバーシップ", "upgrade.title": "自分に合ったプランを選ぶ", "upgrade.copy": "無料で始めるか、用途に合ったプランをお選びください。", "upgrade.free1": "基本メールテンプレート", "upgrade.free2": "ブラウザーに下書きを保存", "upgrade.go1": "拡張された作成ワークフロー", "upgrade.go2": "MailMate プロジェクトを支援", "upgrade.pro1": "高度な利用体験", "upgrade.pro2": "MailMate の開発を支援", "upgrade.freeBtn": "無料で使う", "upgrade.goBtn": "Go を選択", "upgrade.proBtn": "Pro を選択", "upgrade.secure": "お支払い", "upgrade.qrCopy": "銀行アプリで QR コードをスキャンし、確定前に情報をご確認ください。", "upgrade.qrNote": "現在、支払いは自動確認されません。支払い後、管理者にご連絡ください。", "g.save": "保存", "g.cancel": "キャンセル", "g.close": "閉じる", "c.modeQuick": "⚡ AIクイック作成", "c.modeTpl": "🧩 テンプレから作成", "c.step1": "1. トピックを選ぶ", "c.step2": "2. トーンと言語", "c.step3": "3. 情報を入力", "c.tone": "トーン", "c.formal": "丁寧", "c.friendly": "フレンドリー", "c.mailLang": "メールの言語", "c.both": "バイリンガル (VI + EN)", "c.sample": "例を入力", "c.reset": "やり直す", "c.result": "あなたのメール", "c.copy": "📋 コピー", "c.mailto": "✉️ メールアプリで開く", "c.save": "💾 下書き保存", "c.share": "💌 広場に共有", "c.subject": "件名", "c.body": "本文", "d.title": "下書き＆リマインド", "d.fPending": "未送信", "d.fSent": "送信済み", "d.fAll": "すべて", "d.edit": "編集を続ける", "d.send": "送信画面を開く", "d.markSent": "送信済みにする", "d.remind": "リマインド設定", "d.delete": "削除", "d.alert": "期限のリマインドが {n} 件あります", "d.alertBtn": "見る", "d.notifyTitle": "メール送信の時間です", "r.title": "このメールのリマインド", "r.none": "通知なし", "m.title": "テンプレ広場 💌", "m.post": "投稿する", "m.sortNew": "新着順", "m.sortTop": "人気順", "m.allTopics": "すべてのトピック", "a.title": "管理エリア"}).forEach(([k, v]) => UI[k] && (UI[k][2] = v));
+  Object.assign(UI, {"isl.snooze": ["Hoãn 10 phút", "Snooze 10 min", "10分後に再通知"], "isl.demo": ["Email xin nghỉ học (thử)", "Absence email (preview)", "欠席メール（テスト）"], "isl.big": ["Tệp quá lớn (tối đa 2MB)", "File too large (max 2MB)", "ファイルが大きすぎます（最大2MB）"], "rv.title": ["Khách hàng nói gì về MailMate", "What users say about MailMate", "利用者の声"], "rv.all": ["Tất cả", "All", "すべて"], "rv.pos": ["Tích cực", "Positive", "良い評価"], "rv.neg": ["Cần cải thiện", "Needs work", "改善点"]});
 
   // ---------- Tiện ích ----------
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -608,7 +626,7 @@ function applyQuickTone(body, lang) {
   // ---------- Lưu trữ & trạng thái ----------
   const Store = {
     read(k, fb) { try { const r = localStorage.getItem(k); return r ? JSON.parse(r) : fb; } catch { return fb; } },
-    write(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { toast(t("err.storage"), "error"); } },
+    write(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); if ([KEYS.drafts].includes(k)) window.dispatchEvent(new CustomEvent("mailmate:data-changed", { detail: { key: k } })); } catch { toast(t("err.storage"), "error"); } },
   };
   let config = { ...DEFAULT_CONFIG, ...Store.read(KEYS.config, {}) };
   let drafts = Store.read(KEYS.drafts, []);
@@ -616,33 +634,30 @@ function applyQuickTone(body, lang) {
   let liked = Store.read(KEYS.liked, []);
   let uiLang = Store.read(KEYS.ui, null) ?? config.uiLang;
   let currentView = "compose";
+  let adminGoogleAllowed = false;
   const saveConfig = () => Store.write(KEYS.config, config);
   const saveDrafts = () => Store.write(KEYS.drafts, drafts);
   const savePosts = () => Store.write(KEYS.posts, posts);
-  const isAdmin = () => { try { return sessionStorage.getItem(KEYS.admin) === "1"; } catch { return false; } };
+  const isAdmin = () => adminGoogleAllowed;
   const getTopics = () => config.topics ?? DEFAULT_TOPICS;
   const liveTopics = () => getTopics().filter((x) => x.enabled !== false);
   const findTopic = (id) => getTopics().find((x) => x.id === id);
   const editableTopics = () => (config.topics ??= clone(DEFAULT_TOPICS));
-  const fieldMeta = (k) => {
-    const meta = FIELDS[k] ?? { vi: k, en: k, ex: { vi: "", en: "" } };
-    if (uiLang !== "ja") return meta;
-    return { ...meta, ja: JA_FIELDS[k] ?? meta.en, ex: { ...meta.ex, ja: meta.ex.en ?? "" } };
-  };
-  const fieldLabel = (k, l) => fieldMeta(k)[l] ?? fieldMeta(k).en;
+  const fieldMeta = (k) => FIELDS[k] ?? { vi: k, en: k, ex: { vi: "", en: "" } };
+  const fieldLabel = (k, l) => fieldMeta(k)[l];
   const fmt = (ms, dateOnly = false) => new Date(ms).toLocaleString({ vi: "vi-VN", en: "en-GB", ja: "ja-JP" }[uiLang], dateOnly ? { dateStyle: "medium" } : { dateStyle: "short", timeStyle: "short" });
 
   // ---------- Đa ngôn ngữ giao diện ----------
   const t = (key, vars = {}) => (UI[key]?.[{ vi: 0, en: 1, ja: 2 }[uiLang]] ?? UI[key]?.[1] ?? key).replace(/\{(\w+)\}/g, (m, k) => (k in vars ? vars[k] : m));
   function applyI18n() {
+    renderQuickOptions(); translateStatic();
     document.documentElement.lang = uiLang;
-    window.mailMateTranslate = (key) => t(key);
     qa("[data-i18n]").forEach((el) => { if (UI[el.dataset.i18n]) el.textContent = t(el.dataset.i18n); });
     qa("[data-i18n-ph]").forEach((el) => { el.placeholder = t(el.dataset.i18nPh); });
     qa("[data-ui-lang]").forEach((b) => b.classList.toggle("active", b.dataset.uiLang === uiLang));
     q("#siteName").textContent = config.siteName;
-    const h1 = q("h1"); if (h1 && h1.firstChild) h1.firstChild.textContent = config.siteName + " ";
-    document.title = config.siteName + " – " + ({ vi: "Soạn email hoàn chỉnh", en: "Write polished emails", ja: "メールを作成" }[uiLang] || "Write polished emails");
+    const h1 = q(".wrap > h1"); if (h1 && h1.firstChild) h1.firstChild.textContent = config.siteName + " ";
+    document.title = config.siteName + " – " + (uiLang === "vi" ? "Soạn email hoàn chỉnh" : "Write polished emails");
   }
   function setUiLang(l) { uiLang = l; Store.write(KEYS.ui, l); applyI18n(); renderAll(); }
 
@@ -697,11 +712,10 @@ function applyQuickTone(body, lang) {
     q("#editingBadge").hidden = !cs.draftId;
     renderTopics(); renderFields(); generate(); renderOutputs();
   }
-  const JA_TOPIC_NAMES = { leave_school: "欠席連絡", leave_work: "休暇申請", job_apply: "求人応募", internship: "インターン申請", extension: "提出期限の延長", thanks_interview: "面接後のお礼", resign: "退職届", recommend: "推薦状の依頼", follow_up: "返信のフォローアップ" };
   function renderTopics() {
     q("#topicGrid").innerHTML = liveTopics().map((x) => `
       <button type="button" class="topic ${x.id === cs.topicId ? "active" : ""}" data-id="${esc(x.id)}">
-        <span class="topic-icon">${esc(x.icon)}</span><span>${esc((uiLang === "ja" ? (JA_TOPIC_NAMES[x.id] ?? x.name.en) : (x.name[uiLang] ?? x.name.en)))}</span></button>`).join("");
+        <span class="topic-icon">${esc(x.icon)}</span><span>${esc((x.name[uiLang] ?? x.name.en))}</span></button>`).join("");
   }
   function renderFields() {
     const tp = currentTopic(); const exLang = mailLangs()[0];
@@ -882,7 +896,7 @@ function applyQuickTone(body, lang) {
   }
   function renderCommunity() {
     const sel = q("#cmTopic");
-    sel.innerHTML = `<option value="">${t("m.allTopics")}</option>` + getTopics().map((x) => `<option value="${esc(x.id)}">${esc(x.icon)} ${esc((uiLang === "ja" ? (JA_TOPIC_NAMES[x.id] ?? x.name.en) : (x.name[uiLang] ?? x.name.en)))}</option>`).join("");
+    sel.innerHTML = `<option value="">${t("m.allTopics")}</option>` + getTopics().map((x) => `<option value="${esc(x.id)}">${esc(x.icon)} ${esc((x.name[uiLang] ?? x.name.en))}</option>`).join("");
     sel.value = cm.topic;
     const list = visiblePosts();
     q("#postGrid").innerHTML = list.length ? list.map(postCard).join("") : `<p class="empty">${t("m.empty")}</p>`;
@@ -927,7 +941,7 @@ function applyQuickTone(body, lang) {
   }
   function openPostDialog(prefill = {}) {
     const form = q("#formPost"); form.reset();
-    form.elements.topicId.innerHTML = getTopics().map((x) => `<option value="${esc(x.id)}">${esc(x.icon)} ${esc((uiLang === "ja" ? (JA_TOPIC_NAMES[x.id] ?? x.name.en) : (x.name[uiLang] ?? x.name.en)))}</option>`).join("");
+    form.elements.topicId.innerHTML = getTopics().map((x) => `<option value="${esc(x.id)}">${esc(x.icon)} ${esc((x.name[uiLang] ?? x.name.en))}</option>`).join("");
     Object.entries({ title: "", topicId: liveTopics()[0]?.id, lang: uiLang, subject: "", body: "", ...prefill }).forEach(([k, v]) => { if (form.elements[k] && v != null) form.elements[k].value = v; });
     q("#dlgPost").showModal();
   }
@@ -957,7 +971,7 @@ function applyQuickTone(body, lang) {
   // ---------- Quản trị ----------
   let adminTab = "settings"; let editingTopicId = null;
   function renderAdmin() {
-    const ok = isAdmin(); q("#formLogin").hidden = ok; q("#adminPanel").hidden = !ok; if (!ok) return;
+    const ok = isAdmin(); q("#formLogin").hidden = true; q("#adminPanel").hidden = !ok; if (!ok) return;
     qa("#adminTabs [data-tab]").forEach((b) => b.classList.toggle("active", b.dataset.tab === adminTab));
     qa(".admin-pane").forEach((p) => { p.hidden = p.dataset.pane !== adminTab; });
     fillSettings(); renderAdminTopics(); renderAdminPosts();
@@ -976,8 +990,8 @@ function applyQuickTone(body, lang) {
   }
   function renderAdminTopics() {
     q("#adminTopics").innerHTML = getTopics().map((x) => `<li class="row-item" data-id="${esc(x.id)}">
-      <input type="checkbox" data-act="toggle" ${x.enabled !== false ? "checked" : ""} aria-label="${esc((uiLang === "ja" ? (JA_TOPIC_NAMES[x.id] ?? x.name.en) : (x.name[uiLang] ?? x.name.en)))}"><span class="topic-icon">${esc(x.icon)}</span>
-      <div class="grow"><strong>${esc((uiLang === "ja" ? (JA_TOPIC_NAMES[x.id] ?? x.name.en) : (x.name[uiLang] ?? x.name.en)))}</strong><small>${esc((x.subject[uiLang] ?? x.subject.en))}</small></div>
+      <input type="checkbox" data-act="toggle" ${x.enabled !== false ? "checked" : ""} aria-label="${esc((x.name[uiLang] ?? x.name.en))}"><span class="topic-icon">${esc(x.icon)}</span>
+      <div class="grow"><strong>${esc((x.name[uiLang] ?? x.name.en))}</strong><small>${esc((x.subject[uiLang] ?? x.subject.en))}</small></div>
       <button type="button" class="btn" data-act="edit">${t("a.edit")}</button><button type="button" class="btn danger" data-act="delete">${t("a.delete")}</button></li>`).join("");
   }
   function openTopicDialog(id = null) {
@@ -1031,11 +1045,9 @@ function applyQuickTone(body, lang) {
   }
   function bindAdmin() {
     q("#formLogin").addEventListener("submit", (e) => {
-      e.preventDefault(); const pin = new FormData(e.target).get("pin");
-      if (pin !== config.pin) return toast(t("a.wrongPin"), "error");
-      sessionStorage.setItem(KEYS.admin, "1"); e.target.reset(); renderAdmin();
+      e.preventDefault();
     });
-    q("#btnLogout").addEventListener("click", () => { sessionStorage.removeItem(KEYS.admin); renderAdmin(); });
+    q("#btnLogout").addEventListener("click", () => q("#googleSignOut")?.click());
     q("#adminTabs").addEventListener("click", (e) => { if (!e.target.dataset.tab) return; adminTab = e.target.dataset.tab; renderAdmin(); });
     q("#formSettings").addEventListener("submit", (e) => { e.preventDefault(); saveSettings(e.target); });
     q("#btnAddTopic").addEventListener("click", () => openTopicDialog());
@@ -1053,7 +1065,7 @@ function applyQuickTone(body, lang) {
 
   // ---------- Điều hướng & khởi động ----------
   // Script gốc đã tự ẩn/hiện #vCompose và #vForum; ở đây chỉ bổ sung hai màn mới.
-  const VIEWS = ["compose", "drafts", "forum", "admin", "pro"];
+  const VIEWS = ["compose", "drafts", "forum", "admin"];
   // Chuyển tab mượt (View Transitions API: nhòe + trượt); trình duyệt cũ thì đổi thẳng
   function show(view) {
     const calm = matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -1062,23 +1074,98 @@ function applyQuickTone(body, lang) {
   }
   function showNow(view) {
     currentView = VIEWS.includes(view) ? view : "compose";
+    if (currentView === "admin" && !isAdmin()) currentView = "compose";
     q("#vCompose").hidden = currentView !== "compose"; q("#vForum").hidden = currentView !== "forum";
-    q("#vDrafts").hidden = currentView !== "drafts"; q("#vAdmin").hidden = currentView !== "admin"; q("#vPro").hidden = currentView !== "pro";
+    q("#vDrafts").hidden = currentView !== "drafts"; q("#vAdmin").hidden = currentView !== "admin";
     qa(".nav .tab").forEach((b) => b.setAttribute("aria-selected", b.dataset.v === currentView));
     moveThumb();
     if (currentView === "drafts") renderDrafts();
     if (currentView === "forum") renderCommunity();
     if (currentView === "admin") renderAdmin();
-    if (currentView === "pro") renderPlanState();
     if (currentView === "compose" && !q("#modeTpl").hidden) qa(".tmail-body").forEach(autosize);
   }
   const go = (view) => show(view);
   function renderAll() { renderComposer(); renderDrafts(); renderDraftBadge(); renderCommunity(); renderAdmin(); checkReminders(); renderReviews(); requestAnimationFrame(moveThumb); }
 
+  let smoothScrollFrame = 0;
+  function smoothScrollTo(target) {
+    const element = typeof target === "number" ? null : target;
+    const margin = element ? parseFloat(getComputedStyle(element).scrollMarginTop) || 0 : 0;
+    const maxScroll = Math.max(0, document.documentElement.scrollHeight - innerHeight);
+    const destination = Math.min(maxScroll, Math.max(0, typeof target === "number" ? target : element.getBoundingClientRect().top + scrollY - margin));
+    const start = scrollY;
+    const distance = destination - start;
+    cancelAnimationFrame(smoothScrollFrame);
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches || Math.abs(distance) < 2) {
+      window.scrollTo(0, destination);
+      return;
+    }
+    const duration = Math.min(1600, Math.max(850, Math.abs(distance) * 0.52));
+    let began = 0;
+    const frame = (now) => {
+      if (!began) began = now;
+      const progress = Math.min(1, (now - began) / duration);
+      const eased = progress < 0.5 ? 4 * progress ** 3 : 1 - ((-2 * progress + 2) ** 3) / 2;
+      window.scrollTo(0, start + distance * eased);
+      if (progress < 1) smoothScrollFrame = requestAnimationFrame(frame);
+      else smoothScrollFrame = 0;
+    };
+    smoothScrollFrame = requestAnimationFrame(frame);
+  }
+  const cancelSmoothScroll = () => { cancelAnimationFrame(smoothScrollFrame); smoothScrollFrame = 0; };
+  window.addEventListener("wheel", cancelSmoothScroll, { passive: true });
+  window.addEventListener("touchstart", cancelSmoothScroll, { passive: true });
+
   function init() {
     resetComposer(); bindDialogs(); bindComposer(); bindDrafts(); bindCommunity(); bindAdmin();
-    q(".nav").addEventListener("click", (e) => { const b = e.target.closest(".tab"); if (b) show(b.dataset.v); });
-    qa("[data-ui-lang]").forEach((b) => b.addEventListener("click", () => setUiLang(b.dataset.uiLang)));
+    window.addEventListener("mailmate:auth-state", (event) => {
+      adminGoogleAllowed = event.detail?.isAdmin === true;
+      const adminTab = q('.nav [data-v="admin"]');
+      if (adminTab) adminTab.hidden = !adminGoogleAllowed;
+      if (!adminGoogleAllowed && currentView === "admin") show("compose");
+      renderCommunity();
+      renderAdmin();
+    });
+    window.addEventListener("mailmate:cloud-updated", () => {
+      drafts = Store.read(KEYS.drafts, []);
+      const profile = store("mm_profile") || {};
+      PF.forEach((id) => { const input = q("#" + id); if (input && profile[id] != null) input.value = profile[id]; });
+      drawDrafts(); renderAll();
+    });
+    const clockPrefs = () => ({ timezone: localStorage.getItem("mm_timezone") || "Asia/Ho_Chi_Minh", location: localStorage.getItem("mm_location") || "", format: localStorage.getItem("mm_time_format") || "24" });
+    const updateLiveClock = () => { const now = new Date(), prefs = clockPrefs(), locale = ({vi:"vi-VN",en:"en-GB",ja:"ja-JP"})[uiLang] || "vi-VN", options = {hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:prefs.format === "12",timeZone:prefs.timezone}; try { const time = now.toLocaleTimeString(locale, options); const date = now.toLocaleDateString(locale,{weekday:"long",year:"numeric",month:"long",day:"numeric",timeZone:prefs.timezone}); q("#liveClock").textContent = time; q("#liveDate").textContent = date; q("#floatingTime").textContent = time; q("#floatingDate").textContent = now.toLocaleDateString(locale,{day:"2-digit",month:"short",year:"numeric",timeZone:prefs.timezone}); q("#floatingLocation").textContent = prefs.location || prefs.timezone; } catch { q("#floatingTime").textContent = now.toLocaleTimeString(locale, options); } };
+    updateLiveClock(); setInterval(updateLiveClock, 1000);
+    const scrollToView = (id) => setTimeout(() => { const target = q(id); if (target) smoothScrollTo(target); }, 140);
+    document.addEventListener("click", (e) => {
+      const link = e.target.closest('a[href^="#"]');
+      if (!link) return;
+      const href = link.getAttribute("href");
+      if (href === "#") { e.preventDefault(); smoothScrollTo(0); return; }
+      let id;
+      try { id = decodeURIComponent(href.slice(1)); } catch { return; }
+      const target = document.getElementById(id);
+      if (!target) return;
+      e.preventDefault();
+      history.pushState(null, "", href);
+      const targetView = { vCompose: "compose", vDrafts: "drafts", vForum: "forum", vAdmin: "admin" }[id];
+      if (targetView) show(targetView);
+      setTimeout(() => smoothScrollTo(target), targetView ? 150 : 0);
+    });
+    q("#tryWeb").addEventListener("click", () => { show("compose"); scrollToView("#vCompose"); });
+    q("#heroLearn").addEventListener("click", () => scrollToView("#features"));
+    q("#featureTry").addEventListener("click", () => { show("compose"); scrollToView("#vCompose"); });
+    q("#openSettings").addEventListener("click", () => { const prefs = clockPrefs(); q("#settingsTimezone").value = prefs.timezone; q("#settingsLocation").value = prefs.location; q("#settingsTimeFormat").value = prefs.format; q("#settingsDialog").showModal(); });
+    q("#closeSettings").addEventListener("click", () => q("#settingsDialog").close());
+    q("#settingsDialog").addEventListener("click", (e) => { if (e.target === q("#settingsDialog")) q("#settingsDialog").close(); });
+    q("#saveSettings").addEventListener("click", () => { localStorage.setItem("mm_timezone", q("#settingsTimezone").value); localStorage.setItem("mm_location", q("#settingsLocation").value.trim()); localStorage.setItem("mm_time_format", q("#settingsTimeFormat").value); updateLiveClock(); q("#settingsDialog").close(); });
+    q("#settingsLogout").addEventListener("click", () => { q("#settingsDialog").close(); q("#googleSignOut")?.click(); });
+    q("#openUpgrade").addEventListener("click", () => q("#upgradeDialog").showModal());
+    q("#closeUpgrade").addEventListener("click", () => q("#upgradeDialog").close());
+    q("#upgradeDialog").addEventListener("click", (e) => { if (e.target === q("#upgradeDialog")) q("#upgradeDialog").close(); const b = e.target.closest("[data-plan]"); if (!b) return; if (b.dataset.plan === "free") { q("#upgradeDialog").close(); return; } const go = b.dataset.plan === "go"; q("#qrPayment").hidden = false; q("#qrTitle").textContent = go ? "Thanh toán MailMate Go" : "Thanh toán MailMate Pro"; q("#qrAmount").textContent = go ? "1807¥" : "2008¥"; smoothScrollTo(q("#qrPayment")); });
+    q(".nav").addEventListener("click", (e) => { const b = e.target.closest(".tab"); if (!b) return; if (b.dataset.v) { show(b.dataset.v); scrollToView({compose:"#vCompose",drafts:"#vDrafts",forum:"#vForum",admin:"#vAdmin"}[b.dataset.v]); } });
+    const updateLanguageButtons = () => qa("[data-ui-lang]").forEach((b) => b.classList.toggle("active", b.dataset.uiLang === uiLang));
+    qa("[data-ui-lang]").forEach((b) => b.addEventListener("click", () => { setUiLang(b.dataset.uiLang); updateLanguageButtons(); }));
+    updateLanguageButtons();
     document.addEventListener("click", (e) => { const b = e.target.closest("[data-go]"); if (b) go(b.dataset.go); });
     q("#modeTabs [data-mode=quick]").classList.add("active");
     applyI18n(); renderAll(); show("compose");
@@ -1095,22 +1182,9 @@ function applyQuickTone(body, lang) {
   document.fonts?.ready.then(moveThumb);
   q("#dockMain").addEventListener("click", () => q("#theme").classList.toggle("open"));
 
-  // ---------- Nhạc chuông: âm thanh có sẵn + nhiều file người dùng thêm ----------
+  // ---------- Nhạc chuông (tự tạo bằng Web Audio, hoặc tải nhạc của bạn) ----------
   let actx, ringTimer, ringStop, ringAudio;
-  const RTK = "mm2.ring";
-  const CUSTOM_RINGS_KEY = "mm2.customRings";
-  const ring = Store.read(RTK, { id: "chime" });
-  let customRings = Store.read(CUSTOM_RINGS_KEY, []);
-  if (!Array.isArray(customRings)) customRings = [];
-
-  // Tương thích với phiên bản cũ chỉ lưu được một file "Nhạc của tôi".
-  if (ring.id === "custom" && ring.data && !customRings.some((item) => item.data === ring.data)) {
-    customRings.push({ id: "custom-legacy", name: ring.name || "Nhạc của tôi", data: ring.data });
-    ring.id = "custom-legacy";
-    Store.write(CUSTOM_RINGS_KEY, customRings);
-    Store.write(RTK, ring);
-  }
-
+  const RTK = "mm2.ring"; const ring = Store.read(RTK, { id: "chime" });
   const tone = (f, s, d, ty = "sine", g = 0.2) => {
     const o = actx.createOscillator(), n = actx.createGain(), t0 = actx.currentTime + s;
     o.type = ty; o.frequency.value = f; o.connect(n); n.connect(actx.destination);
@@ -1123,118 +1197,45 @@ function applyQuickTone(body, lang) {
     pulse: () => [0, 0.25, 0.5].forEach((s) => { tone(1200, s, 0.12, "square", 0.07); tone(1800, s + 0.1, 0.12, "square", 0.05); }),
     classic: () => [0, 0.3, 0.6, 0.9].forEach((s) => tone(988, s, 0.18, "sawtooth", 0.1)),
   };
-  const RING_FILES = {
-    iphone: "audio/thong-bao-iphone.mp3",
-    newtone: "audio/nhac-chuong-moi.mp3",
+  const FILES = { iphone: "sounds/iphone.mp3", tone2: "sounds/tone2.mp3" };
+  const sweep = (f1, f2, s, d, g = 0.2) => {
+    const o = actx.createOscillator(), n = actx.createGain(), t0 = actx.currentTime + s;
+    o.frequency.setValueAtTime(f1, t0); o.frequency.exponentialRampToValueAtTime(f2, t0 + d); o.connect(n); n.connect(actx.destination);
+    n.gain.setValueAtTime(1e-4, t0); n.gain.exponentialRampToValueAtTime(g, t0 + 0.02); n.gain.exponentialRampToValueAtTime(1e-4, t0 + d); o.start(t0); o.stop(t0 + d + 0.05);
   };
-  const rs = q("#ringSel");
-  const ringDelete = q("#ringDelete");
-
-  function renderRingOptions() {
-    const selectedId = ring.id;
-    rs.querySelectorAll("option[data-custom-ring]").forEach((option) => option.remove());
-    customRings.forEach((item) => {
-      const option = document.createElement("option");
-      option.value = item.id;
-      option.textContent = "🎵 " + item.name;
-      option.dataset.customRing = "true";
-      rs.appendChild(option);
-    });
-    const valid = [...rs.options].some((option) => option.value === selectedId);
-    rs.value = valid ? selectedId : "chime";
-    ring.id = rs.value;
-    const isCustom = customRings.some((item) => item.id === ring.id);
-    ringDelete.hidden = !isCustom;
-  }
-  renderRingOptions();
-
+  Object.assign(RINGS, {
+    bubble: () => [0, 0.22, 0.44].forEach((s, i) => sweep(400 + i * 150, 1200 + i * 200, s, 0.18, 0.25)),
+    harp: () => [392, 494, 587, 784, 988, 1175].forEach((f, i) => tone(f, i * 0.12, 1.2, "sine", 0.18)),
+    sonar: () => { tone(660, 0, 1.6, "sine", 0.3); tone(660, 0.9, 1.6, "sine", 0.12); },
+    arcade: () => [523, 659, 784, 1046, 784, 1046].forEach((f, i) => tone(f, i * 0.09, 0.1, "square", 0.07)),
+    doorbell: () => { tone(659, 0, 1.0, "sine", 0.25); tone(523, 0.55, 1.4, "sine", 0.25); },
+    zen: () => { tone(220, 0, 2.4, "sine", 0.3); tone(440, 0, 2.0, "sine", 0.12); tone(660, 0, 1.6, "sine", 0.06); },
+    xylo: () => [784, 988, 1175, 1568, 1175, 988].forEach((f, i) => tone(f, i * 0.11, 0.35, "triangle", 0.28)),
+  });
   function startRing() {
     stopRing();
-    const customTrack = customRings.find((item) => item.id === ring.id);
-    const fileSource = customTrack?.data || RING_FILES[ring.id];
-    if (fileSource) {
-      ringAudio = new Audio(fileSource);
-      ringAudio.loop = true;
-      ringAudio.play().catch(() => toast("Trình duyệt chưa phát được âm thanh. Hãy bấm nút ▶ để thử lại.", "error"));
-      ringStop = setTimeout(stopRing, 30000);
-      return;
-    }
     const play = () => {
-      actx ??= new (window.AudioContext || window.webkitAudioContext)();
-      actx.resume().then(() => (RINGS[ring.id] || RINGS.chime)()).catch(() => {});
+      if ((ring.id === "custom" && ring.data) || FILES[ring.id]) {
+        if (!ringAudio) { ringAudio = new Audio(FILES[ring.id] || ring.data); ringAudio.loop = true; }
+        ringAudio.play().catch(() => {});
+      } else {
+        actx ??= new (window.AudioContext || window.webkitAudioContext)();
+        actx.resume().then(() => (RINGS[ring.id] || RINGS.chime)()).catch(() => {});
+      }
     };
     play(); ringTimer = setInterval(play, 2800); ringStop = setTimeout(stopRing, 30000);
   }
   function stopRing() { clearInterval(ringTimer); clearTimeout(ringStop); ringAudio?.pause(); ringAudio = null; }
-
-  rs.onchange = () => {
-    ring.id = rs.value;
-    Store.write(RTK, ring);
-    ringDelete.hidden = !customRings.some((item) => item.id === ring.id);
-  };
+  const rs = q("#ringSel");
+  q("#ringSel [value=custom]").hidden = !ring.data; rs.value = ring.id;
+  rs.onchange = () => { ring.id = rs.value; Store.write(RTK, ring); startRing(); setTimeout(stopRing, 3500); };
   q("#ringTest").onclick = () => ringIsland({ subject: t("isl.demo") }, true);
-  q("#ringFile").onchange = async (e) => {
-    const files = [...(e.target.files || [])];
-    e.target.value = "";
-    if (!files.length) return;
-
-    const MAX_FILE_SIZE = 2 * 1024 * 1024;
-    const MAX_TOTAL_CHARS = 3_500_000;
-    let totalChars = customRings.reduce((sum, item) => sum + (item.data?.length || 0), 0);
-    let added = 0;
-
-    for (const file of files) {
-      if (!file.type.startsWith("audio/") && !/\.(mp3|wav|ogg|m4a|aac|webm)$/i.test(file.name)) {
-        toast("Bỏ qua file không phải âm thanh: " + file.name, "error");
-        continue;
-      }
-      if (file.size > MAX_FILE_SIZE) {
-        toast("File quá lớn (tối đa 2 MB): " + file.name, "error");
-        continue;
-      }
-      const data = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = () => reject(new Error("Không đọc được file"));
-        reader.readAsDataURL(file);
-      }).catch(() => null);
-      if (!data) {
-        toast("Không đọc được file: " + file.name, "error");
-        continue;
-      }
-      if (totalChars + data.length > MAX_TOTAL_CHARS) {
-        toast("Đã gần đầy bộ nhớ trình duyệt. Hãy xóa bớt nhạc chuông rồi thử lại.", "error");
-        break;
-      }
-      const id = "custom-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 7);
-      customRings.push({ id, name: file.name.replace(/\.[^.]+$/, ""), data });
-      totalChars += data.length;
-      added++;
-    }
-
-    if (added) {
-      try {
-        Store.write(CUSTOM_RINGS_KEY, customRings);
-        ring.id = customRings[customRings.length - 1].id;
-        Store.write(RTK, ring);
-        renderRingOptions();
-        toast("Đã thêm " + added + " nhạc chuông. Bạn có thể chọn trong danh sách.");
-      } catch {
-        toast("Không đủ bộ nhớ để lưu nhạc chuông. Hãy xóa bớt file rồi thử lại.", "error");
-      }
-    }
-  };
-  ringDelete.onclick = () => {
-    const selected = customRings.find((item) => item.id === ring.id);
-    if (!selected) return;
-    if (!confirm(`Xóa nhạc chuông "${selected.name}" khỏi trình duyệt này?`)) return;
-    customRings = customRings.filter((item) => item.id !== selected.id);
-    Store.write(CUSTOM_RINGS_KEY, customRings);
-    ring.id = "chime";
-    Store.write(RTK, ring);
-    stopRing();
-    renderRingOptions();
-    toast("Đã xóa nhạc chuông.");
+  q("#ringFile").onchange = (e) => {
+    const f = e.target.files[0]; if (!f) return;
+    if (f.size > 2e6) return toast(t("isl.big"), "error");
+    const r = new FileReader();
+    r.onload = () => { Object.assign(ring, { id: "custom", data: r.result, name: f.name }); Store.write(RTK, ring); q("#ringSel [value=custom]").hidden = false; rs.value = "custom"; toast("🔔 " + f.name); };
+    r.readAsDataURL(f);
   };
 
   // ---------- Dynamic Island nhắc gửi email ----------
@@ -1265,60 +1266,114 @@ function applyQuickTone(body, lang) {
     closeIsland();
   });
 
-  // ---------- Đánh giá minh họa và góp ý do người dùng gửi ----------
-  // REVIEWS bên dưới là dữ liệu demo hư cấu; ý kiến thực tế được lưu riêng trên trình duyệt hiện tại.
+  // ---------- Góp ý của khách hàng (nhân vật hư cấu, có cả tích cực & tiêu cực) ----------
+  // Muốn dùng ảnh thật của bạn bè/đồng đội (đã được đồng ý) thì thêm img: "link-ảnh" vào từng mục.
   const REVIEWS = [
-    { n: "Minh Anh", h: "@minhanh.k65", e: "👩🏻‍🎓", s: 5, l: 128, demo: true, t: { vi: "Soạn mail xin nghỉ học chưa đến 1 phút, thầy trả lời luôn. Quá tiện!", en: "Wrote my absence email in under a minute and my professor replied right away.", ja: "1分以内に欠席メールを作成でき、とても便利でした。" } },
-    { n: "Hoàng Long", h: "@long.dev", e: "🧑🏽‍💻", s: 5, l: 96, demo: true, t: { vi: "Dark mode đẹp, đổi màu mượt như app iPhone.", en: "Beautiful dark mode and smooth colour switching.", ja: "ダークモードがきれいで、色の切り替えも滑らかです。" } },
-    { n: "Sakura T.", h: "@sakura_t", e: "👩🏻", s: 5, l: 74, demo: true, t: { vi: "Có cả tiếng Nhật nên mình gửi mail cho giáo sư rất tự tin.", en: "Japanese support helps me write emails to professors with confidence.", ja: "日本語に対応しているので、先生へのメールも安心して作成できます。" } },
-    { n: "Quốc Bảo", h: "@baoquoc", e: "👨🏻‍🎤", s: 4, l: 41, demo: true, t: { vi: "Mẫu email đủ dùng, diễn đàn có nhiều ví dụ hay để tham khảo.", en: "Useful templates and plenty of examples in the community.", ja: "便利なテンプレートと参考例がたくさんあります。" } },
-    { n: "Linh Chi", h: "@chi.linh", e: "👩🏻‍🦰", s: 3, l: 22, demo: true, t: { vi: "Mẫu hay nhưng cần đồng bộ nháp giữa các máy.", en: "Nice templates, but syncing drafts across devices would help.", ja: "テンプレートは良いですが、端末間で下書きを同期できると便利です。" } },
-    { n: "Anh Tuấn", h: "@tuan_it", e: "🧔🏻", s: 2, l: 15, demo: true, t: { vi: "Mong có thêm tùy chọn chỉnh âm lượng nhạc chuông.", en: "A ringtone volume control would be helpful.", ja: "着信音の音量調節機能があるとうれしいです。" } },
+    { n: "Trường Giang", h: "@hoichieu.mua", e: "👩🏻‍🎓", s: 5, l: 128, t: { vi: "Soạn mail xin nghỉ học chưa đến 1 phút, thầy trả lời luôn. Quá tiện!", en: "Wrote my absence email in under a minute and my professor replied right away." } },
+    { n: "Hoàng Long", h: "@long.dev", e: "🧑🏽‍💻", s: 5, l: 96, t: { vi: "Dark mode đẹp, đổi màu mượt như app iPhone. Thông báo nhắc gửi mail kiểu Dynamic Island xịn thật.", en: "Beautiful dark mode and buttery colour switching. The Dynamic Island reminder is slick." } },
+    { n: "Sakura T.", h: "@sakura_t", e: "👩🏻", s: 5, l: 74, t: { vi: "Có cả tiếng Nhật nên mình gửi mail cho giáo sư rất tự tin.", en: "日本語のメールも作れて、とても助かります！" } },
+    { n: "Quốc Bảo", h: "@baoquoc", e: "👨🏻‍🎤", s: 4.5, l: 41, t: { vi: "Mẫu email đủ dùng, diễn đàn có nhiều ví dụ hay để tham khảo.", en: "Good templates and plenty of useful samples on the community board." } },
+    { n: "Linh Chi", h: "@chi.linh", e: "👩🏻‍🦰", s: 3.5, l: 22, t: { vi: "Mẫu hay nhưng chưa có đăng nhập Google để đồng bộ nháp giữa các máy.", en: "Nice templates, but no Google sign-in to sync drafts across devices." } },
+    { n: "Anh Tuấn", h: "@tuan_it", e: "🧔🏻", s: 2, l: 15, t: { vi: "Nhạc chuông hơi to, suýt làm cả lớp giật mình 😅 mong có chỉnh âm lượng.", en: "The ringtone is loud and startled the whole class 😅 please add a volume slider." } },
+    { n: "Emily R.", h: "@emily.r", e: "👩🏼", s: 2, l: 9, t: { vi: "Bản dịch tự động đôi lúc chưa tự nhiên, vẫn phải tự sửa lại.", en: "The auto-translation sometimes sounds unnatural, I still have to edit it by hand." } },
   ];
-  const USER_REVIEWS_KEY = "mm2.userReviews";
-  let userReviews = Store.read(USER_REVIEWS_KEY, []);
-  if (!Array.isArray(userReviews)) userReviews = [];
-  let rvF = "all", selectedRating = 5;
+  let rvF = "all";
   function renderReviews() {
     qa("#rvFilter button").forEach((b) => b.classList.toggle("active", b.dataset.f === rvF));
-    const all = [...userReviews.map(r => ({...r, userSubmitted: true, e: "💬", h: t("fb.userReview"), l: 0, t: {vi:r.comment,en:r.comment,ja:r.comment}})), ...REVIEWS];
-    q("#rvGrid").innerHTML = all.filter((r) => rvF === "all" || (rvF === "pos") === (r.s >= 4)).map((r, i) => `
-      <article class="rv-card"><header>
-        <span class="rv-av" style="--h:${i * 47}">${r.img ? `<img src="${esc(r.img)}" alt="">` : esc(r.e || "💬")}</span>
-        <div><b>${esc(r.n || t("fb.user"))}</b><small>${esc(r.userSubmitted ? t("fb.userReview") : r.h)}${r.demo ? " · DEMO" : ""}</small></div>
-        <span class="rv-stars" aria-label="${r.s}/5">${"★".repeat(r.s)}<i>${"★".repeat(5 - r.s)}</i></span></header>
-        <p>${esc(r.t[uiLang] ?? r.t.en)}</p>${r.userSubmitted ? "" : `<footer>♥ ${r.l}</footer>`}</article>`).join("");
+    q("#rvGrid").innerHTML = REVIEWS.filter((r) => rvF === "all" || (rvF === "pos") === (r.s >= 4)).map((r, i) => `
+      <article class="rv-card"><span class="rv-av" style="--h:${i * 47}">${r.img ? `<img src="${esc(r.img)}" alt="${esc(r.n)}">` : r.e}</span>
+        <p>“${esc(r.t[uiLang] ?? r.t.en)}”</p>
+        <footer><b>${esc(r.n)}</b><small>${esc(r.h)} · ♥ ${r.l}</small></footer></article>`).join("");
   }
   q("#rvFilter").addEventListener("click", (e) => { if (e.target.dataset.f) { rvF = e.target.dataset.f; renderReviews(); } });
-  function renderFeedbackStars() {
-    qa("#feedbackStars button").forEach(b => { const active = Number(b.dataset.rating) <= selectedRating; b.classList.toggle("active", active); b.setAttribute("aria-checked", String(Number(b.dataset.rating) === selectedRating)); });
+
+  // ---------- Feedback form: local demo storage ----------
+  const FEEDBACK_KEY = "mailmate_public_feedback_v1";
+  function readFeedback() { try { const data = JSON.parse(localStorage.getItem(FEEDBACK_KEY) || "[]"); return Array.isArray(data) ? data : []; } catch { return []; } }
+  function renderFeedback() {
+    const items = readFeedback(); q("#feedbackCount").textContent = String(items.length);
+    const list = q("#feedbackList");
+    if (!items.length) { list.innerHTML = `<p class="note">${esc(t("fb.empty"))}</p>`; return; }
+    list.innerHTML = items.slice().reverse().map((it) => { const nm = it.name || t("fb.anonymous"); return `<article class="feedback-entry"><div class="feedback-entry-head"><span class="fb-av">${it.photo ? `<img src="${esc(it.photo)}" alt="">` : esc(nm.trim().charAt(0).toUpperCase())}</span><div><strong>${esc(nm)}</strong></div></div><p>${esc(it.message)}</p><small>${esc(it.typeLabel)} · ${esc(it.dateLabel)}</small></article>`; }).join("");
   }
-  qa("#feedbackStars button").forEach(b => b.addEventListener("click", () => { selectedRating = Number(b.dataset.rating); renderFeedbackStars(); }));
-  q("#feedbackForm").addEventListener("submit", (e) => {
-    e.preventDefault(); const form = e.currentTarget; const fd = new FormData(form); const comment = String(fd.get("comment") || "").trim();
-    if (!selectedRating || !comment) { q("#feedbackStatus").textContent = t("fb.required"); return; }
-    userReviews.unshift({ id: uid(), n: String(fd.get("name") || "").trim() || t("fb.user"), s: selectedRating, comment, createdAt: Date.now() });
-    Store.write(USER_REVIEWS_KEY, userReviews); form.reset(); selectedRating = 5; renderFeedbackStars(); renderReviews(); q("#feedbackStatus").textContent = t("fb.thanks");
+  let fbPhoto = "";
+  q("#feedbackPhoto").addEventListener("change", (e) => {
+    const f = e.target.files[0]; fbPhoto = ""; q("#fbPhotoPrev").hidden = true; if (!f) return;
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement("canvas"); c.width = c.height = 240; const s = Math.min(img.width, img.height);
+      c.getContext("2d").drawImage(img, (img.width - s) / 2, (img.height - s) / 2, s, s, 0, 0, 240, 240);
+      fbPhoto = c.toDataURL("image/jpeg", 0.82); q("#fbPhotoPrev").src = fbPhoto; q("#fbPhotoPrev").hidden = false; URL.revokeObjectURL(img.src);
+    };
+    img.src = URL.createObjectURL(f);
   });
-  function renderPlanState() {
-    const p = Store.read("mm2.selectedPlan", "free");
-    qa("[data-plan]").forEach(b => b.classList.toggle("selected", b.dataset.plan === p));
-  }
-  const PLAN_LABELS = { free: { vi: "MailMate Free · 0đ", en: "MailMate Free · 0 VND", ja: "MailMate Free · 0 VND" }, go: { vi: "MailMate Go · 29.000đ/tháng", en: "MailMate Go · 29,000 VND/month", ja: "MailMate Go · 月額29,000 VND" }, pro: { vi: "MailMate Pro · 79.000đ/tháng", en: "MailMate Pro · 79,000 VND/month", ja: "MailMate Pro · 月額79,000 VND" } };
-  qa("[data-plan]").forEach(b => b.addEventListener("click", () => {
-    const plan = b.dataset.plan; Store.write("mm2.selectedPlan", plan); renderPlanState();
-    if (plan === "free") { q("#paymentPanel").hidden = true; return; }
-    q("#paymentPanel").hidden = false; q("#selectedPlan").textContent = PLAN_LABELS[plan][uiLang] || PLAN_LABELS[plan].en;
-    q("#paymentPanel").scrollIntoView({ behavior: "smooth", block: "center" });
-  }));
-  renderFeedbackStars();
+  q("#feedbackForm").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const message = q("#feedbackMessage").value.trim();
+    if (!message) { q("#feedbackMessage").focus(); return; }
+    const type = q("#feedbackType").value;
+    const typeLabels = { suggestion: t("fb.suggestion"), bug: t("fb.bug"), experience: t("fb.experience") };
+    const now = new Date();
+    const item = { id: Date.now(), name: q("#feedbackName").value.trim(), photo: fbPhoto, type, typeLabel: typeLabels[type] || type, message, dateLabel: now.toLocaleDateString(uiLang === "ja" ? "ja-JP" : uiLang === "en" ? "en-US" : "vi-VN") };
+    try { const items = readFeedback(); items.push(item); localStorage.setItem(FEEDBACK_KEY, JSON.stringify(items.slice(-50))); } catch { q("#feedbackStatus").textContent = t("fb.storageError"); return; }
+    q("#feedbackMessage").value = ""; fbPhoto = ""; q("#feedbackPhoto").value = ""; q("#fbPhotoPrev").hidden = true; q("#feedbackStatus").textContent = t("fb.success"); renderFeedback();
+  });
 
   // ---------- Nhắc đính kèm trước khi mở Gmail + rung nhẹ khi bấm ----------
+  Object.assign(UI, {
+    "auth.signedOut": ["Chưa đăng nhập", "Signed out", "未ログイン"], "auth.signIn": ["Đăng nhập Google", "Continue with Google", "Googleでログイン"], "auth.signOut": ["Đăng xuất", "Sign out", "ログアウト"], "auth.syncing": ["Đang đồng bộ nháp…", "Syncing drafts…", "下書きを同期中…"], "auth.synced": ["Đã đồng bộ nháp", "Drafts synced", "下書きを同期しました"], "auth.syncError": ["Đăng nhập được nhưng chưa đồng bộ dữ liệu. Kiểm tra Firestore Rules.", "Signed in, but data did not sync. Check Firestore Rules.", "ログインしましたが同期できません。Firestoreルールを確認してください。"], "auth.signInError": ["Không đăng nhập được. Hãy kiểm tra Google provider và miền được phép.", "Sign-in failed. Check the Google provider and authorized domains.", "ログインできません。Googleプロバイダと承認済みドメインを確認してください。"],
+    "footer.product": ["MailMate", "MailMate", "MailMate"], "footer.features": ["Tính năng", "Features", "機能"], "footer.compose": ["Soạn email", "Compose email", "メールを作成"], "footer.community": ["Diễn đàn mẫu", "Email examples", "メール例"], "footer.support": ["Điều khoản và chính sách", "Terms and policies", "利用規約とポリシー"], "footer.terms": ["Điều khoản sử dụng", "Terms of Use", "利用規約"], "footer.privacy": ["Chính sách quyền riêng tư", "Privacy Policy", "プライバシーポリシー"], "footer.usage": ["Chính sách sử dụng", "Acceptable Use Policy", "利用ポリシー"], "footer.other": ["Chính sách khác", "Other Policies", "その他のポリシー"], "footer.reviews": ["Đánh giá", "Reviews", "レビュー"], "footer.note": ["Được tạo để giúp mỗi email trở nên rõ ràng hơn.", "Built to make every email clearer.", "メールをもっと明確にするために。"],
+    "fb.eyebrow": ["MAILMATE / GÓP Ý", "MAILMATE / FEEDBACK", "MAILMATE / フィードバック"],
+    "fb.title": ["Cùng MailMate tốt hơn mỗi ngày.", "Help MailMate get better every day.", "MailMate をもっと良くするために"],
+    "fb.copy": ["Hãy chia sẻ cảm nhận, báo lỗi hoặc đề xuất tính năng mới.", "Share your experience, report a bug, or suggest a feature.", "感想、バグ報告、新機能の提案をお寄せください。"],
+    "fb.rating": ["Bạn đánh giá trải nghiệm thế nào?", "How would you rate your experience?", "体験を評価してください"],
+    "fb.type": ["Loại phản hồi", "Feedback type", "フィードバックの種類"],
+    "fb.suggestion": ["Đề xuất", "Suggestion", "提案"], "fb.bug": ["Báo lỗi", "Bug report", "バグ報告"], "fb.experience": ["Trải nghiệm chung", "General experience", "全体的な感想"],
+    "fb.name": ["Tên hiển thị (không bắt buộc)", "Display name (optional)", "表示名（任意）"], "fb.namePh": ["Tên của bạn", "Your name", "お名前"],
+    "fb.message": ["Nội dung góp ý", "Your feedback", "フィードバック内容"], "fb.messagePh": ["Bạn muốn MailMate cải thiện điều gì?", "What should MailMate improve?", "MailMate に改善してほしい点は？"],
+    "fb.localNote": ["Bản hiện tại chỉ lưu phản hồi trên trình duyệt này. Để chia sẻ giữa tất cả người dùng, cần kết nối cơ sở dữ liệu trực tuyến.", "This version stores feedback only in this browser. A shared online database is needed for feedback visible to all users.", "現在のバージョンではこのブラウザー内にのみ保存されます。全ユーザーで共有するにはオンラインデータベースが必要です。"],
+    "fb.submit": ["Gửi phản hồi ↗", "Send feedback ↗", "フィードバックを送信 ↗"], "fb.recent": ["Phản hồi trên thiết bị này", "Feedback on this device", "この端末のフィードバック"],
+    "fb.empty": ["Chưa có phản hồi nào. Bạn có thể là người đầu tiên!", "No feedback yet. Be the first!", "まだフィードバックはありません。最初の投稿者になりましょう！"], "fb.anonymous": ["Người dùng", "User", "ユーザー"],
+    "fb.success": ["Cảm ơn bạn! Phản hồi đã được lưu trên thiết bị này.", "Thank you! Your feedback has been saved on this device.", "ありがとうございます。この端末にフィードバックを保存しました。"], "fb.storageError": ["Không thể lưu phản hồi. Hãy kiểm tra bộ nhớ trình duyệt.", "Could not save feedback. Please check browser storage.", "保存できませんでした。ブラウザーのストレージを確認してください。"],
+    "fb.footer": ["Được tạo để giúp mỗi email trở nên rõ ràng hơn.", "Built to make every email clearer.", "メールをもっと明確にするために。"], "fb.footerLink": ["Gửi góp ý", "Send feedback", "フィードバックを送る"]
+  });
   UI["att.ask"] = ["Thư có nhắc đến file đính kèm. Bạn đã sẵn sàng đính kèm khi gửi chưa?", "Your email mentions an attachment. Ready to attach it when sending?", "メールに添付ファイルの記載があります。送信時に添付できますか？"];
   q("#gm").addEventListener("click", (e) => {
     if (/đính kèm|\bCV\b|attach|添付/i.test(q("#body").value) && !confirm(t("att.ask"))) e.preventDefault();
   });
   document.addEventListener("click", (e) => { if (e.target.closest("button, .btn, .tab")) navigator.vibrate?.(8); });
+
+  renderFeedback();
+  // ---------- Tùy chọn form soạn nhanh (chủ đề / giọng điệu / ngôn ngữ) + dịch chữ tĩnh ----------
+  Object.assign(UI, {
+    "fb.photo": ["Ảnh của bạn (không bắt buộc)", "Your photo (optional)", "あなたの写真（任意）"],
+    "fb.halfHint": ["Bấm nửa trái của ngôi sao để chọn nửa điểm (ví dụ 3.5).", "Click the left half of a star to give half a point (e.g. 3.5).", "星の左半分をクリックすると0.5点になります（例：3.5）。"],
+  });
+  Object.entries(QT).forEach(([k, v]) => { // giọng điệu mới cho chế độ soạn theo mẫu
+    if (TONES[k]) return; TONES[k] = {};
+    ["vi", "en"].forEach((l) => { TONES[k][l] = { hi: `${v[l][0]}{{recipient}},`, bye: `${v[l][1]}\n{{sender}}` }; });
+  });
+  const QI = () => ({ vi: 0, en: 1, ja: 2 }[uiLang]);
+  function renderQuickOptions() {
+    const fill = (sel, items) => { if (!sel) return; const old = sel.value; sel.innerHTML = items.map(([v, l]) => `<option value="${esc(v)}">${esc(l)}</option>`).join(""); sel.value = items.some((x) => x[0] === old) ? old : items[0][0]; };
+    fill(q("#topic"), QTOPICS.map((x) => [x[0], `${x[1]} ${x[2][QI()]}`]));
+    fill(q("#lang"), QLANGS.map((x) => [x[0], x[1][QI()]]));
+    const tones = QTONES.map((x) => [x[0], x[1][QI()]]);
+    ["#qTone", "#tone", "#formSettings [name=tone]"].forEach((s) => fill(q(s), tones));
+  }
+  const VLIST = [["Chào bạn, mình là MailMate ✨", "Hi, I'm MailMate ✨", "こんにちは、MailMateです ✨"], ["Mình là người trợ lý thân thiết của bạn.", "I'm your friendly writing assistant.", "あなたの頼れるメール作成アシスタントです。"], ["Hôm nay mình có thể giúp gì cho bạn đây?", "How can I help you today?", "今日は何をお手伝いしましょうか？"], ["Bắt đầu soạn thư", "Start writing", "作成を始める"], ["Hôm nay mình có thể giúp gì cho bạn? Điền thông tin bên dưới hoặc tham khảo diễn đàn, mình sẽ soạn email hoàn chỉnh để bạn gửi.", "How can I help today? Fill in the details below or browse the community, and I'll write a complete email for you.", "下の情報を入力するか広場を参考にすれば、完成したメールを作成します。"], ["Thông tin & Cấu hình", "Details & Settings", "情報と設定"], ["Chủ đề email", "Email topic", "メールのトピック"], ["Tên Giảng viên/Người nhận", "Recipient / Lecturer name", "受取人・講師の名前"], ["Họ và tên của bạn", "Your full name", "あなたの氏名"], ["Email người nhận", "Recipient email", "受取人のメール"], ["Mã số sinh viên", "Student ID", "学籍番号"], ["Lớp / Ngành", "Class / Major", "クラス・専攻"], ["Trình duyệt sẽ tự động nhớ thông tin của bạn cho lần sau.", "Your browser will remember your details for next time.", "次回のためにブラウザが情報を記憶します。"], ["Lý do chi tiết", "Detailed reason", "詳しい理由"], ["Ngôn ngữ đích", "Target language", "出力言語"], ["✨ AI Soạn Email Ngay", "✨ Write Email with AI", "✨ AIでメールを作成"], ["Email của bạn sẽ hiện ở đây. Bạn có thể sửa trực tiếp.", "Your email will appear here. You can edit it directly.", "ここにメールが表示されます。直接編集できます。"], ["Đến (email)", "To (email)", "宛先（メール）"], ["Tiêu đề", "Subject", "件名"], ["Nội dung", "Body", "本文"], ["📋 Sao chép", "📋 Copy", "📋 コピー"], ["💾 Lưu nháp", "💾 Save draft", "💾 下書き保存"], ["🚀 Gửi qua Gmail ➜", "🚀 Send via Gmail ➜", "🚀 Gmailで送信 ➜"], ["Nháp chưa gửi", "Unsent drafts", "未送信の下書き"], ["Chưa có nháp nào.", "No drafts yet.", "下書きはまだありません。"], ["Đã gửi (Xóa)", "Sent (Delete)", "送信済み（削除）"], ["(Không có tiêu đề)", "(No subject)", "（件名なし）"], ["VD: Cô Lê Hằng", "e.g. Prof. Smith", "例：山田先生"], ["VD: Nguyễn Văn A", "e.g. John Smith", "例：山田太郎"], ["VD: 21110123", "e.g. 21110123", "例：21110123"], ["VD: 12C3 / CNTT", "e.g. 12C3 / IT", "例：12C3 / 情報工学"], ["VD: Em bị sốt cấp tính từ đêm qua, không thể đi học được...", "e.g. I've had a high fever since last night and can't attend class...", "例：昨夜から高熱があり、授業に出られません…"], ["Vui lòng nhập tên người nhận.", "Please enter the recipient's name.", "受取人の名前を入力してください。"], ["Tên không được chứa số/ký tự đặc biệt.", "Name can't contain digits or special characters.", "名前に数字や特殊文字は使えません。"], ["Vui lòng nhập họ và tên của bạn.", "Please enter your full name.", "氏名を入力してください。"], ["Họ tên không được chứa số/ký tự đặc biệt.", "Your name can't contain digits or special characters.", "氏名に数字や特殊文字は使えません。"], ["Vui lòng nhập email.", "Please enter an email.", "メールアドレスを入力してください。"], ["Email phải có ký tự '@'.", "Email must contain '@'.", "メールには「@」が必要です。"], ["Vui lòng nhập Lớp/Ngành học.", "Please enter your class / major.", "クラス・専攻を入力してください。"], ["Vui lòng nhập MSSV.", "Please enter your student ID.", "学籍番号を入力してください。"], ["MSSV bị lỗi (Chỉ được chứa số, không chứa chữ cái).", "Invalid ID (digits only, no letters).", "学籍番号が不正です（数字のみ）。"], ["Vui lòng nhập lý do chi tiết.", "Please enter a detailed reason.", "詳しい理由を入力してください。"], ["⏳ AI đang dịch và tạo thư...", "⏳ AI is translating and writing...", "⏳ AIが翻訳・作成中…"], ["✅ Đã tạo thư thành công!", "✅ Email created!", "✅ メールを作成しました！"], ["✅ Đã sao chép vào khay nhớ tạm.", "✅ Copied to clipboard.", "✅ クリップボードにコピーしました。"], ["Lỗi sao chép!", "Copy failed!", "コピーに失敗しました！"], ["⚠️ Thư đang trống!", "⚠️ The email is empty!", "⚠️ メールが空です！"], ["✅ Đã lưu nháp!", "✅ Draft saved!", "✅ 下書きを保存しました！"]];
+  const norm = (s) => s.replace(/\s+/g, " ").trim();
+  const VM = new Map(); VLIST.forEach((e) => e.forEach((x) => VM.set(norm(x), e)));
+  const VT = (s) => { const e = VM.get(norm(s)); return e ? e[QI()] : s; };
+  window.VT = VT;
+  function translateStatic() {
+    const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, { acceptNode: (n) => (n.parentElement.closest("script,style,[data-i18n]") ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT) });
+    for (let n; (n = w.nextNode()); ) {
+      const e = VM.get(norm(n.nodeValue)); if (!e) continue;
+      n.nodeValue = n.nodeValue.match(/^\s*/)[0] + e[QI()] + n.nodeValue.match(/\s*$/)[0];
+    }
+    qa("[placeholder]:not([data-i18n-ph])").forEach((el) => { const e = VM.get(norm(el.placeholder)); if (e) el.placeholder = e[QI()]; });
+  }
 
   init();
 })();
