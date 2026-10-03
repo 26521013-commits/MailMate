@@ -153,7 +153,10 @@ a:focus-visible {
 
 button.btn,
 a.btn {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   font: inherit;
   font-weight: 500;
   font-size: 0.9rem;
@@ -169,10 +172,13 @@ a.btn {
     color 0.3s,
     border-color 0.3s;
 }
-.btn.main {
+.btn.main,
+.btn.primary {
   background: var(--acc);
   border-color: var(--acc);
   color: var(--onacc);
+}
+.btn.main {
   width: 100%;
   margin-top: 16px;
   padding: 11px;
@@ -221,7 +227,8 @@ a.btn {
   padding: 40px 8px;
   text-align: center;
 }
-.note {
+.note,
+.hint {
   font-size: 0.85rem;
   color: var(--mute);
   margin-top: 10px;
@@ -396,26 +403,42 @@ h1 .tw {
   animation: tw 2.4s ease-in-out infinite;
 }
 
-/* Bảng chọn màu (Góc trái) */
-.theme {
+/* Bảng chọn màu (Góc trái) & Ngôn ngữ (Góc phải) */
+.theme,
+.lang-switch {
   position: absolute;
   top: 16px;
-  left: 16px;
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  margin: 0;
   background: var(--card);
   padding: 8px 12px;
   border-radius: 8px;
   border: 1px solid var(--line);
   z-index: 10;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-  transition:
-    background 0.3s,
-    border-color 0.3s;
 }
+.theme {
+  left: 16px;
+  flex-wrap: wrap;
+}
+.lang-switch {
+  right: 16px;
+  padding: 4px;
+  border-radius: 8px;
+}
+.lang-switch .btn {
+  padding: 6px 10px;
+  border: none;
+  font-weight: bold;
+  background: transparent;
+}
+.lang-switch .btn.active {
+  background: var(--acc);
+  color: var(--onacc);
+  border-radius: 6px;
+}
+
 .sw {
   width: 28px;
   height: 28px;
@@ -425,16 +448,13 @@ h1 .tw {
   cursor: pointer;
   padding: 0;
 }
-.sw[aria-pressed="true"] {
-  box-shadow: 0 0 0 2px var(--ink);
-}
 .theme span {
   font-size: 0.85rem;
   color: var(--mute);
   font-weight: 500;
 }
 
-/* ---- BÁO LỖI (CHỮ ĐỎ + VIỀN ĐỎ) ---- */
+/* Báo lỗi */
 .required {
   color: var(--red);
   font-weight: bold;
@@ -454,7 +474,7 @@ h1 .tw {
   display: block;
 }
 
-/* Diễn đàn css */
+/* Diễn đàn & Hộp thoại */
 .fc {
   border-top: 1px solid var(--line);
   padding: 14px 0;
@@ -468,18 +488,23 @@ h1 .tw {
 .fh small {
   display: block;
   color: var(--mute);
+  margin-top: 4px;
 }
 .tag {
   display: inline-block;
   background: var(--soft);
   border-radius: 999px;
-  padding: 0 9px;
+  padding: 2px 10px;
   font-size: 0.78rem;
-  margin-right: 4px;
+  margin-right: 6px;
+  font-weight: 500;
 }
 .pv {
-  color: var(--mute);
-  margin: 6px 0;
+  color: var(--ink);
+  margin: 8px 0;
+  font-family: var(--font-letter);
+  line-height: 1.6;
+  font-size: 1.05rem;
 }
 .d {
   display: flex;
@@ -489,9 +514,16 @@ h1 .tw {
   border-top: 1px solid var(--line);
   padding: 10px 0;
 }
-.d b {
-  display: block;
+
+.dlg {
+  width: min(450px, calc(100% - 32px));
+  padding: 24px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--card);
+  color: var(--ink);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
 }
-.d small {
-  color: var(--mute);
+.dlg::backdrop {
+  background: rgba(0, 0, 0, 0.5);
 }

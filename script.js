@@ -1,40 +1,58 @@
+// ==========================================
+// FILE: script.js (Chỉ chứa Logic xử lý)
+// ==========================================
+
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => document.querySelectorAll(s);
-
-// Lưu thông tin vào bộ nhớ
+let currentTopic = Object.keys(TOPICS)[0];
 function store(k, v) {
   try {
-    if (v === undefined) return JSON.parse(localStorage.getItem(k) || "null");
+    if (v === undefined) {
+      const item = localStorage.getItem(k);
+      return JSON.parse(item !== null ? item : "null");
+    }
     localStorage.setItem(k, JSON.stringify(v));
   } catch (e) {
     return null;
   }
+} // Chuyển đổi Ngôn ngữ UI
+let uiLang = store("mm_ui_lang") || "vi";
+function applyUiLang() {
+  $$("[data-i18n]").forEach((el) => {
+    const key = el.getAttribute("data-i18n");
+    if (I18N[uiLang] && I18N[uiLang][key]) {
+      el.innerHTML = I18N[uiLang][key];
+    }
+  });
+  $$("#uiLangSwitch button").forEach((btn) => {
+    btn.classList.toggle("active", btn.getAttribute("data-lang") === uiLang);
+  });
 }
+applyUiLang();
+$$("#uiLangSwitch button").forEach((btn) => {
+  btn.addEventListener("click", (e) => {
+    uiLang = e.target.getAttribute("data-lang");
+    store("mm_ui_lang", uiLang);
+    applyUiLang();
+  });
+});
 
-// ------------------------------------
-// 1. TÍNH NĂNG GIAO DIỆN (Sáng/Tối, Màu sắc, Tab, Bot)
-// ------------------------------------
-
-// Sáng/Tối
+// Chuyển Sáng Tối & Màu Sắc
 const themeBtn = $("#theme-toggle");
-let isDark = store("mm_dark_mode") || false;
-
+let isDark = store("mm_dark_mode") === true;
 function updateDarkMode() {
   if (isDark) document.documentElement.setAttribute("data-theme", "dark");
   else document.documentElement.removeAttribute("data-theme");
-  if (themeBtn) themeBtn.innerText = isDark ? "☀️ Sáng" : "🌙 Tối";
+  if (themeBtn) themeBtn.innerText = isDark ? "☀️" : "🌙";
 }
 updateDarkMode();
-
-if (themeBtn) {
+if (themeBtn)
   themeBtn.onclick = () => {
     isDark = !isDark;
     store("mm_dark_mode", isDark);
     updateDarkMode();
   };
-}
 
-// Bảng Màu
 const PRE = [
   ["Xanh dương", "#1F5FBF"],
   ["Hồng", "#E8589A"],
@@ -70,7 +88,7 @@ $("#rst").onclick = () => {
   if (c) applyColor(c);
 }
 
-// Hiệu ứng hạt lấp lánh & Bot
+// Hiệu ứng Bot & Chuyển Tab
 function sparkle(host, n) {
   const ch = ["✦", "✧", "♡", "✉", "⋆", "✿"],
     r = Math.random;
@@ -102,7 +120,6 @@ if (helloBot) {
   t = setTimeout(close, 4000);
 }
 
-// Chuyển Tab (Soạn thư <-> Diễn đàn)
 document.querySelector(".nav").addEventListener("click", (e) => {
   const b = e.target.closest(".tab");
   if (b) {
@@ -114,9 +131,34 @@ document.querySelector(".nav").addEventListener("click", (e) => {
   }
 });
 
-// ------------------------------------
-// 2. LOGIC TẠO THƯ & QUÉT LỖI (VALIDATION)
-// ------------------------------------
+// Dropdown & Soạn thư
+$("#topic").innerHTML = Object.keys(TOPICS)
+  .map((t) => `<option value="${t}">${t}</option>`)
+  .join("");
+$("#topic").addEventListener("change", (e) => {
+  setTopic(e.target.value);
+});
+
+function setTopic(t) {
+  currentTopic = t;
+  const sug = TOPICS[t].r;
+  const list = [...sug, ...ALL_R.filter((x) => !sug.includes(x)), OTHER];
+  $("#rcp").innerHTML = list
+    .map((x) => `<option value="${x}">${x}</option>`)
+    .join("");
+  $("#rcpx").hidden = true;
+}
+setTopic(currentTopic);
+
+$("#rcp").addEventListener("change", () => {
+  const o = $("#rcp").value === OTHER;
+  $("#rcpx").hidden = !o;
+  if (o) $("#rcpx").focus();
+});
+function getRecipientRole() {
+  return $("#rcp").value === OTHER ? $("#rcpx").value.trim() : $("#rcp").value;
+}
+
 function showError(inputId, message) {
   const inputEl = document.getElementById(inputId);
   const errorEl = document.getElementById("err-" + inputId);
@@ -133,7 +175,6 @@ function clearAllErrors() {
     el.innerText = "";
   });
 }
-
 function removeVietnameseTones(str) {
   return str
     .normalize("NFD")
@@ -141,7 +182,6 @@ function removeVietnameseTones(str) {
     .replace(/đ/g, "d")
     .replace(/Đ/g, "D");
 }
-
 async function translateText(text, targetLang) {
   if (targetLang === "vi") return text;
   try {
@@ -151,7 +191,7 @@ async function translateText(text, targetLang) {
     const data = await response.json();
     return data.responseData.translatedText;
   } catch (error) {
-    return text + " (Lỗi dịch tự động)";
+    return text;
   }
 }
 
@@ -159,178 +199,198 @@ $("#go").onclick = async () => {
   clearAllErrors();
   let hasError = false;
 
+  const role = getRecipientRole();
   const rname = $("#rname").value.trim();
   const me = $("#me").value.trim();
   const rto = $("#rto").value.trim();
   const sid = $("#sid").value.trim();
   const maj = $("#maj").value.trim();
   const pts = $("#pts").value.trim();
+  const tone = $("#tone").value;
 
   const invalidCharRegex = /[0-9!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]+/;
-  const nonDigitRegex = /[^0-9]/; // Lọc chữ, chỉ cho phép số
+  const nonDigitRegex = /[^0-9]/;
 
-  // Bắt lỗi đỏ: Tên người nhận
   if (!rname) {
-    showError("rname", "Vui lòng nhập tên người nhận.");
+    showError(
+      "rname",
+      uiLang === "vi"
+        ? "Vui lòng nhập tên người nhận."
+        : "Please enter recipient name.",
+    );
     hasError = true;
   } else if (invalidCharRegex.test(rname)) {
-    showError("rname", "Tên không được chứa số/ký tự đặc biệt.");
+    showError(
+      "rname",
+      uiLang === "vi"
+        ? "Tên không chứa ký tự đặc biệt."
+        : "No special characters.",
+    );
     hasError = true;
   }
 
-  // Bắt lỗi đỏ: Tên sinh viên
   if (!me) {
-    showError("me", "Vui lòng nhập họ và tên của bạn.");
+    showError(
+      "me",
+      uiLang === "vi" ? "Vui lòng nhập họ tên." : "Please enter your name.",
+    );
     hasError = true;
   } else if (invalidCharRegex.test(me)) {
-    showError("me", "Họ tên không được chứa số/ký tự đặc biệt.");
+    showError(
+      "me",
+      uiLang === "vi"
+        ? "Họ tên không chứa ký tự đặc biệt."
+        : "No special characters.",
+    );
     hasError = true;
   }
 
-  // Bắt lỗi đỏ: Email
-  if (!rto) {
-    showError("rto", "Vui lòng nhập email.");
-    hasError = true;
-  } else if (!rto.includes("@")) {
-    showError("rto", "Email phải có ký tự '@'.");
+  if (!rto || !rto.includes("@")) {
+    showError(
+      "rto",
+      uiLang === "vi" ? "Email không hợp lệ." : "Invalid email.",
+    );
     hasError = true;
   }
-
-  // Bắt lỗi đỏ: Lớp/Ngành (Không được bỏ trống)
   if (!maj) {
-    showError("maj", "Vui lòng nhập Lớp/Ngành học.");
+    showError(
+      "maj",
+      uiLang === "vi" ? "Vui lòng nhập ngành." : "Major required.",
+    );
     hasError = true;
   }
-
-  // Bắt lỗi đỏ: MSSV (Không được bỏ trống + Không được có chữ)
-  if (!sid) {
-    showError("sid", "Vui lòng nhập MSSV.");
-    hasError = true;
-  } else if (nonDigitRegex.test(sid)) {
-    showError("sid", "MSSV bị lỗi (Chỉ được chứa số, không chứa chữ cái).");
+  if (!sid || nonDigitRegex.test(sid)) {
+    showError(
+      "sid",
+      uiLang === "vi"
+        ? "MSSV chỉ chứa số."
+        : "Student ID must be numbers only.",
+    );
     hasError = true;
   }
-
-  // Bắt lỗi đỏ: Lý do
   if (!pts) {
-    showError("pts", "Vui lòng nhập lý do chi tiết.");
+    showError(
+      "pts",
+      uiLang === "vi" ? "Vui lòng nhập lý do." : "Reason required.",
+    );
     hasError = true;
   }
 
-  // Dừng quá trình nếu có lỗi
   if (hasError) return;
 
-  // Bắt đầu tạo thư
   $("#go").disabled = true;
-  $("#go").innerText = "⏳ AI đang dịch và tạo thư...";
+  $("#go").innerText =
+    uiLang === "vi" ? "⏳ AI đang dịch và tạo thư..." : "⏳ AI is composing...";
   $("#msg").innerText = "";
 
   const lang = $("#lang").value;
-  const topic = $("#topic").value;
-
-  let finalName = me;
-  let finalTeacher = rname;
+  let finalName = me,
+    finalTeacher = rname;
   if (lang !== "vi") {
     finalName = removeVietnameseTones(me);
     finalTeacher = removeVietnameseTones(rname);
   }
 
-  // Chờ dịch lý do chi tiết
   let finalDetails = await translateText(pts, lang);
   let finalSubject = "",
     finalBody = "";
 
-  if (topic === "nghi-hoc") {
-    if (lang === "vi") {
-      finalSubject = `[XIN NGHỈ HỌC] - ${finalName} - MSSV: ${sid}`;
-      finalBody = `Kính gửi ${finalTeacher},\n\nEm tên là: ${finalName}\nMã số SV: ${sid}\nLớp/Ngành: ${maj}\n\nEm viết thư này kính xin phép ${finalTeacher} cho em được nghỉ buổi học hôm nay.\nLý do: ${finalDetails}\n\nEm xin cam kết sẽ tự nghiên cứu bài giảng và hoàn thiện các bài tập đầy đủ.\n\nEm xin chân thành cảm ơn.\n\nTrân trọng,\n${finalName}`;
-    } else if (lang === "en") {
-      finalSubject = `[ABSENCE REQUEST] - ${finalName} - ID: ${sid}`;
-      finalBody = `Dear ${finalTeacher},\n\nMy name is ${finalName}, Student ID: ${sid}, Major: ${maj}.\n\nI am writing to respectfully request an excused absence from your class today.\nReason: ${finalDetails}\n\nI assure you that I will catch up on any missed assignments.\n\nThank you for your understanding.\n\nBest regards,\n${finalName}`;
-    } else if (lang === "ja") {
-      finalSubject = `[欠席届] - ${finalName} - 学籍番号: ${sid}`;
-      finalBody = `${finalTeacher} 先生\n\nお疲れ様です。\n${maj}の ${finalName}（学籍番号: ${sid}）です。\n\n誠に恐縮ですが、本日の授業を欠席させていただきたくご連絡いたしました。\n理由：${finalDetails}\n\n欠席した分の課題については後日提出いたします。\n\nよろしくお願いいたします。\n\n敬具\n${finalName}`;
-    }
-  } else {
-    finalSubject = `[${topic.toUpperCase()}] - ${finalName} - ${sid}`;
-    finalBody = `Kính gửi ${finalTeacher},\n\nThông tin sinh viên:\n- Họ tên: ${finalName}\n- MSSV: ${sid}\n- Lớp/Ngành: ${maj}\n\nNội dung: ${finalDetails}\n\nTrân trọng,\n${finalName}`;
+  let greeting = `Kính gửi ${role} ${finalTeacher},`;
+  let closing = `Kính thư,\n\n${finalName}`;
+
+  if (tone.includes("gần gũi")) {
+    greeting = `Thân gửi ${role} ${finalTeacher},`;
+    closing = `Trân trọng,\n\n${finalName}`;
+  } else if (tone.includes("Ngắn gọn")) {
+    greeting = `Gửi ${finalTeacher},`;
+    closing = `${finalName}`;
   }
 
-  // Đẩy kết quả ra màn hình
+  if (lang === "vi") {
+    finalSubject = `[${currentTopic.toUpperCase()}] - ${finalName} - MSSV: ${sid}`;
+    if (currentTopic === "Xin nghỉ học/nghỉ làm") {
+      finalBody = `${greeting}\n\nTôi/Em tên là: ${finalName}\nMSSV: ${sid}\nLớp/Ngành: ${maj}\n\nTôi/Em viết thư này để kính xin phép ${role} cho tôi/em được nghỉ.\nLý do: ${finalDetails}\n\nTôi/Em xin cam kết sẽ tự cập nhật bài giảng.\n\nXin chân thành cảm ơn.\n\n${closing}`;
+    } else {
+      finalBody = `${greeting}\n\nThông tin:\n- Họ tên: ${finalName}\n- MSSV: ${sid}\n- Lớp/Ngành: ${maj}\n\nNội dung chi tiết: ${finalDetails}\n\n${closing}`;
+    }
+  } else if (lang === "en") {
+    finalSubject = `[${currentTopic.toUpperCase()}] - ${finalName} - ID: ${sid}`;
+    finalBody = `Dear ${role} ${finalTeacher},\n\nMy name is ${finalName}, Student ID: ${sid}, Major: ${maj}.\n\nMessage: ${finalDetails}\n\nThank you for your time.\n\nBest regards,\n${finalName}`;
+  } else {
+    finalSubject = `[${currentTopic.toUpperCase()}] - ${finalName} - 学籍番号: ${sid}`;
+    finalBody = `${role} ${finalTeacher} 様\n\nお疲れ様です。\n${maj}の ${finalName}（学籍番号: ${sid}）です。\n\n詳細：${finalDetails}\n\nよろしくお願いいたします。\n\n敬具\n${finalName}`;
+  }
+
   $("#subj").value = finalSubject;
   $("#body").value = finalBody;
-  $("#to").value = rto; // Tự động điền email nhận vào kết quả
-
-  updateGmailLink(); // Cập nhật lại đường dẫn nút Gmail
+  $("#to").value = rto;
+  updateGmailLink();
 
   $("#empty").hidden = true;
   $("#out").hidden = false;
   $("#go").disabled = false;
-  $("#go").innerText = "✨ AI Soạn Email Ngay";
-  $("#msg").innerText = "✅ Đã tạo thư thành công!";
+  $("#go").innerText =
+    uiLang === "vi" ? "✨ AI Soạn Email Ngay" : "✨ AI Compose Now";
+  $("#msg").innerText =
+    uiLang === "vi"
+      ? "✅ Đã tạo thư thành công!"
+      : "✅ Email successfully composed!";
 };
 
-// ------------------------------------
-// 3. TÍNH NĂNG TIỆN ÍCH (GMAIL, COPY, LƯU NHÁP)
-// ------------------------------------
 function updateGmailLink() {
   const to = encodeURIComponent($("#to").value.trim());
   const su = encodeURIComponent($("#subj").value);
   const body = encodeURIComponent($("#body").value);
-
-  // Link Gmail chuẩn hóa
-  const url = `https://mail.google.com/mail/?view=cm&fs=1&to=${to}&su=${su}&body=${body}`;
-  $("#gm").href = url;
+  $("#gm").href =
+    `https://mail.google.com/mail/?view=cm&fs=1&to=${to}&su=${su}&body=${body}`;
 }
-
-// Cập nhật link liên tục nếu người dùng sửa ở ô kết quả
 ["#subj", "#body", "#to"].forEach((id) => {
-  const el = $(id);
-  if (el) el.addEventListener("input", updateGmailLink);
+  $(id)?.addEventListener("input", updateGmailLink);
 });
 
-// Lưu tự động các ô thông tin cá nhân
-const PF = ["me", "sid", "maj", "fac", "rname", "rto"];
-const prof = store("mm_profile") || {};
-PF.forEach((id) => {
+// Lưu thông tin & Nháp
+let savedProf = store("mm_profile");
+const prof = savedProf ? savedProf : {};
+["me", "sid", "maj", "rname", "rto"].forEach((id) => {
   if (prof[id]) $("#" + id).value = prof[id];
   $("#" + id).addEventListener("input", () => {
-    const p = store("mm_profile") || {};
+    let p = store("mm_profile");
+    p = p ? p : {};
     p[id] = $("#" + id).value;
     store("mm_profile", p);
   });
 });
 
-// Sao chép
 $("#copy").onclick = async () => {
-  const t = `Tiêu đề: ${$("#subj").value}\n\n${$("#body").value}`;
   try {
-    await navigator.clipboard.writeText(t);
-    $("#msg").innerText = "✅ Đã sao chép vào khay nhớ tạm.";
+    await navigator.clipboard.writeText(
+      `Tiêu đề: ${$("#subj").value}\n\n${$("#body").value}`,
+    );
+    $("#msg").innerText = "✅ Đã sao chép";
   } catch (err) {
-    alert("Lỗi sao chép!");
+    alert("Lỗi sao chép");
   }
 };
 
-// Lưu nháp (Local Storage)
 function drawDrafts() {
-  const d = store("mm_drafts") || [];
+  let d = store("mm_drafts");
+  d = d ? d : [];
   $("#dl").innerHTML = d.length
     ? d
         .map(
           (x) => `
     <div class="d">
-      <div><b>${x.subj || "(Không có tiêu đề)"}</b></div>
+      <div><b>${x.subj ? x.subj : "..."}</b></div>
       <button class="btn" data-done="${x.id}">Đã gửi (Xóa)</button>
     </div>`,
         )
         .join("")
-    : '<div class="note">Chưa có nháp nào.</div>';
+    : `<div class="note">${uiLang === "vi" ? "Chưa có nháp nào." : "No drafts yet."}</div>`;
 }
 $("#save").onclick = () => {
-  if (!$("#subj").value.trim() && !$("#body").value.trim())
-    return alert("⚠️ Thư đang trống!");
-  const d = store("mm_drafts") || [];
+  if (!$("#subj").value.trim()) return;
+  let d = store("mm_drafts");
+  d = d ? d : [];
   d.unshift({ id: Date.now(), subj: $("#subj").value, body: $("#body").value });
   store("mm_drafts", d);
   drawDrafts();
@@ -338,7 +398,8 @@ $("#save").onclick = () => {
 };
 $("#dl").addEventListener("click", (e) => {
   if (e.target.dataset.done) {
-    const d = store("mm_drafts") || [];
+    let d = store("mm_drafts");
+    d = d ? d : [];
     store(
       "mm_drafts",
       d.filter((i) => i.id != e.target.dataset.done),
@@ -347,3 +408,82 @@ $("#dl").addEventListener("click", (e) => {
   }
 });
 drawDrafts();
+
+// Logic Diễn đàn Cộng đồng (Đăng bài)
+const defaultPosts = [
+  {
+    id: "1",
+    title: "Xin nghỉ ốm tiêu chuẩn",
+    topic: "Xin nghỉ học",
+    author: "Nguyễn Minh",
+    body: "Kính gửi Thầy/Cô, em bị sốt cao không thể đến lớp, xin phép thầy cô cho em nghỉ buổi học hôm nay...",
+  },
+  {
+    id: "2",
+    title: "Xin nộp bài tập trễ",
+    topic: "Xin nộp trễ",
+    author: "Trần An",
+    body: "Kính gửi Thầy/Cô, do sự cố máy tính mất dữ liệu, em kính xin thầy cô gia hạn thêm 1 ngày để em hoàn thiện bài tập...",
+  },
+];
+
+function drawCommunity() {
+  let posts = store("mm_community_posts");
+  posts = posts ? posts : defaultPosts;
+  $("#flist").innerHTML = posts
+    .map(
+      (p) => `
+    <article class="fc">
+      <div class="fh">
+        <div><b>${p.title}</b><small><span class="tag">${p.topic}</span>${p.author || "Ẩn danh"} · Mới nhất</small></div>
+      </div>
+      <p class="pv">${p.body.substring(0, 120)}...</p>
+    </article>
+  `,
+    )
+    .join("");
+}
+drawCommunity();
+
+$("#shareToCommunity").onclick = () => {
+  $("#dlgShare").showModal();
+};
+$("#cancelShare").onclick = (e) => {
+  e.preventDefault();
+  $("#dlgShare").close();
+};
+$("#confirmShare").onclick = (e) => {
+  e.preventDefault();
+  const title = $("#sharePostTitle").value.trim();
+  const author = $("#sharePostAuthor").value.trim();
+  const body = $("#body").value.trim();
+
+  if (!title)
+    return alert(
+      uiLang === "vi"
+        ? "Vui lòng nhập tiêu đề bài viết!"
+        : "Please enter a post title!",
+    );
+
+  let posts = store("mm_community_posts");
+  posts = posts ? posts : defaultPosts;
+
+  posts.unshift({
+    id: Date.now().toString(),
+    title: title,
+    topic: currentTopic,
+    author: author,
+    body: body,
+  });
+
+  store("mm_community_posts", posts);
+  drawCommunity();
+
+  $("#sharePostTitle").value = "";
+  $("#sharePostAuthor").value = "";
+  $("#dlgShare").close();
+  $("#msg").innerText =
+    uiLang === "vi"
+      ? "✅ Đã đăng lên diễn đàn cộng đồng!"
+      : "✅ Posted to community forum!";
+};
