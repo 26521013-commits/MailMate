@@ -2,6 +2,19 @@ window.VT = (s) => s;
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => document.querySelectorAll(s);
 
+// A fresh visit to the home page should show the greeting instead of restoring
+// an old scroll position somewhere deep in the page.
+if ("scrollRestoration" in history) {
+  history.scrollRestoration = "manual";
+  addEventListener("pageshow", () => {
+    if (!location.hash) {
+      window.scrollTo(0, 0);
+      requestAnimationFrame(() => requestAnimationFrame(() => window.scrollTo(0, 0)));
+    }
+  }, { once: true });
+  if (!location.hash) window.scrollTo(0, 0);
+}
+
 // Lưu thông tin vào bộ nhớ
 function store(k, v) {
   try {
@@ -105,7 +118,7 @@ if (helloBot) {
   });
   const hiBtn = $("#hi");
   if (hiBtn) hiBtn.focus();
-  t = setTimeout(close, 4000);
+  t = setTimeout(close, matchMedia("(max-width: 760px)").matches ? 8000 : 4000);
 }
 
 // Chuyển Tab (Soạn thư <-> Diễn đàn)
@@ -158,7 +171,7 @@ async function translateText(text, targetLang, fromLang = "vi") {
     if (Number(data.responseStatus) !== 200) throw new Error("mm");
     return data.responseData.translatedText;
   } catch (error) {
-    return fromLang === "en" ? text : text + " (Lỗi dịch tự động)";
+    return text;
   }
 }
 
@@ -328,43 +341,18 @@ $("#copy").onclick = async () => {
   }
 };
 
-// Lưu nháp (Local Storage)
-function drawDrafts() {
-  const d = store("mm_drafts") || [];
-  $("#dl").innerHTML = d.length
-    ? d
-        .map(
-          (x) => `
-    <div class="d">
-      <div><b>${x.subj || "(Không có tiêu đề)"}</b></div>
-      <button class="btn" data-done="${x.id}">Đã gửi (Xóa)</button>
-    </div>`,
-        )
-        .join("")
-    : '<div class="note">Chưa có nháp nào.</div>';
-}
 $("#save").onclick = () => {
   if (!$("#subj").value.trim() && !$("#body").value.trim())
     return alert(VT("⚠️ Thư đang trống!"));
-  const d = store("mm_drafts") || [];
-  d.unshift({ id: Date.now(), subj: $("#subj").value, body: $("#body").value });
-  store("mm_drafts", d);
-  drawDrafts();
+  window.dispatchEvent(new CustomEvent("mailmate:save-quick-draft", { detail: {
+    id: window.mailmateQuickEditingId || null,
+    to: $("#to").value.trim(), subj: $("#subj").value, body: $("#body").value,
+    language: $("#lang").value, topicId: $("#topic").value, tone: $("#qTone").value,
+    inputs: Object.fromEntries(["rname", "me", "rto", "sid", "maj", "pts"].map((id) => [id, $("#" + id).value])),
+  }}));
+  window.mailmateQuickEditingId = null;
   $("#msg").innerText = VT("✅ Đã lưu nháp!");
 };
-$("#dl").addEventListener("click", (e) => {
-  if (e.target.dataset.done) {
-    const d = store("mm_drafts") || [];
-    store(
-      "mm_drafts",
-      d.filter((i) => i.id != e.target.dataset.done),
-    );
-    drawDrafts();
-  }
-});
-drawDrafts();
-
-
 // =====================================================================
 // 4. TÍNH NĂNG MỞ RỘNG (lấy từ web Phú): giọng điệu, soạn theo mẫu & song ngữ,
 //    nháp + nhắc nhở, diễn đàn cộng đồng, quản trị, đa ngôn ngữ giao diện
@@ -418,6 +406,17 @@ function quickGeneric(topic, lang, name, teacher, sid, maj, details) {
 async function translateLines(text, to) { // MyMemory giới hạn ~500 ký tự/lần nên dịch từng dòng
   return (await Promise.all(text.split("\n").map((l) => (l.trim() ? translateText(l, to, "en") : l)))).join("\n");
 }
+async function translateToJapanese(text, from) {
+  const chunks = []; let rest = String(text || "");
+  while (rest.length > 400) {
+    let split = rest.lastIndexOf(" ", 400); if (split < 200) split = 400;
+    chunks.push(rest.slice(0, split)); rest = rest.slice(split).trimStart();
+  }
+  if (rest) chunks.push(rest);
+  const translated = [];
+  for (const chunk of chunks) translated.push(await translateText(chunk, "ja", from));
+  return translated.join(" ");
+}
 
 
 (() => {
@@ -425,48 +424,48 @@ async function translateLines(text, to) { // MyMemory giới hạn ~500 ký tự
   const q = (s, r = document) => r.querySelector(s);
   const qa = (s, r = document) => [...r.querySelectorAll(s)];
 
-  const KEYS = { config: "mm2.config", drafts: "mm2.drafts", posts: "mm2.posts", liked: "mm2.liked", ui: "mm2.ui", admin: "mm2.admin" };
+  const KEYS = { config: "mm2.config", drafts: "mm2.drafts", posts: "mm2.posts", liked: "mm2.liked", ui: "mm2.ui" };
+  const SITE_NAME = "KhaBi.Mail";
   const DEFAULT_CONFIG = {
-    siteName: "MailMate", uiLang: "vi", mailLang: "vi", tone: "formal",
+    uiLang: "vi", mailLang: "vi", tone: "formal",
     autoRemindHours: 24, moderation: true, comments: true,
-    pin: "1234", // chỉ là demo phía trình duyệt
     topics: null,
   };
 
   // ---------- Trường nhập ----------
-  const f = (vi, en, exVi, exEn) => ({ vi, en, ex: { vi: exVi, en: exEn } });
+  const f = (vi, en, exVi, exEn, ja = en, exJa = exEn) => ({ vi, en, ja, ex: { vi: exVi, en: exEn, ja: exJa } });
   const FIELDS = {
-    recipient: f("Người nhận", "Recipient", "Thầy Nguyễn Văn A", "Prof. Smith"),
-    sender: f("Họ tên của bạn", "Your name", "Trần Thu Hà", "Ha Tran"),
-    senderInfo: f("Thông tin của bạn (lớp, MSSV hoặc chức vụ)", "Your details (class, ID or role)", "sinh viên lớp K65-CNTT, MSSV 20201234", "a student of class K65-IT, ID 20201234"),
-    course: f("Tên môn học", "Course", "Giải tích 1", "Calculus 1"),
-    date: f("Ngày", "Date", "12/03/2026", "March 12, 2026"),
-    reason: f("Lý do", "Reason", "em bị sốt và có lịch khám tại bệnh viện", "I have a fever and a hospital appointment"),
-    handover: f("Phương án bàn giao", "Handover plan", "anh Nam sẽ tiếp nhận các yêu cầu của khách hàng", "Nam will cover customer requests"),
-    position: f("Vị trí", "Position", "Nhân viên Marketing", "Marketing Executive"),
-    company: f("Công ty / tổ chức", "Company / organization", "Công ty ABC", "ABC Company"),
-    highlights: f("Điểm mạnh nổi bật", "Key strengths", "3 năm chạy quảng cáo, thành thạo Google Analytics, làm việc nhóm tốt", "3 years running ads, strong Google Analytics skills, great teamwork"),
-    major: f("Chuyên ngành", "Major", "Quản trị kinh doanh", "Business Administration"),
-    duration: f("Thời gian thực tập", "Internship period", "3 tháng, từ 01/06 đến 31/08", "3 months, June 1 to August 31"),
-    deadline: f("Hạn chót", "Deadline", "20/03/2026", "March 20, 2026"),
-    newDate: f("Hạn mới đề xuất", "Proposed new date", "27/03/2026", "March 27, 2026"),
-    lastDay: f("Ngày làm việc cuối cùng", "Last working day", "30/04/2026", "April 30, 2026"),
-    purpose: f("Mục đích (học bổng, chương trình…)", "Purpose (scholarship, program…)", "học bổng Chevening", "the Chevening scholarship"),
-    achievements: f("Thành tích nổi bật", "Key achievements", "GPA 3.6/4, nhóm đạt điểm cao nhất đồ án cuối kỳ, 2 năm trong CLB sinh viên", "GPA 3.6/4, top project in the class, 2 years in the student club"),
-    originalSubject: f("Tiêu đề email đã gửi", "Original subject", "Xin gia hạn nộp bài Giải tích 1", "Extension request for Calculus 1"),
-    sentDate: f("Ngày đã gửi", "Date sent", "05/03/2026", "March 5, 2026"),
+    recipient: f("Người nhận", "Recipient", "Thầy Nguyễn Văn A", "Prof. Smith", "宛先", "山田先生"),
+    sender: f("Họ tên của bạn", "Your name", "Trần Thu Hà", "Ha Tran", "あなたの氏名", "田中花子"),
+    senderInfo: f("Thông tin của bạn (lớp, MSSV hoặc chức vụ)", "Your details (class, ID or role)", "sinh viên lớp K65-CNTT, MSSV 20201234", "a student of class K65-IT, ID 20201234", "あなたの情報（クラス、学生番号、役職など）", "情報工学科の学生、学生番号20201234"),
+    course: f("Tên môn học", "Course", "Giải tích 1", "Calculus 1", "科目名", "微積分学 I"),
+    date: f("Ngày", "Date", "12/03/2026", "March 12, 2026", "日付", "2026年3月12日"),
+    reason: f("Lý do", "Reason", "em bị sốt và có lịch khám tại bệnh viện", "I have a fever and a hospital appointment", "理由", "発熱のため病院を受診する予定です"),
+    handover: f("Phương án bàn giao", "Handover plan", "anh Nam sẽ tiếp nhận các yêu cầu của khách hàng", "Nam will cover customer requests", "引き継ぎ方法", "ナムさんがお客様からの依頼を引き継ぎます"),
+    position: f("Vị trí", "Position", "Nhân viên Marketing", "Marketing Executive", "応募職種", "マーケティング担当"),
+    company: f("Công ty / tổ chức", "Company / organization", "Công ty ABC", "ABC Company", "会社・団体名", "ABC株式会社"),
+    highlights: f("Điểm mạnh nổi bật", "Key strengths", "3 năm chạy quảng cáo, thành thạo Google Analytics, làm việc nhóm tốt", "3 years running ads, strong Google Analytics skills, great teamwork", "主な強み", "広告運用経験3年、Google Analyticsに精通、チームワークが得意"),
+    major: f("Chuyên ngành", "Major", "Quản trị kinh doanh", "Business Administration", "専攻", "経営学"),
+    duration: f("Thời gian thực tập", "Internship period", "3 tháng, từ 01/06 đến 31/08", "3 months, June 1 to August 31", "インターン期間", "6月1日から8月31日までの3か月間"),
+    deadline: f("Hạn chót", "Deadline", "20/03/2026", "March 20, 2026", "締切", "2026年3月20日"),
+    newDate: f("Hạn mới đề xuất", "Proposed new date", "27/03/2026", "March 27, 2026", "希望する新しい期限", "2026年3月27日"),
+    lastDay: f("Ngày làm việc cuối cùng", "Last working day", "30/04/2026", "April 30, 2026", "最終出勤日", "2026年4月30日"),
+    purpose: f("Mục đích (học bổng, chương trình…)", "Purpose (scholarship, program…)", "học bổng Chevening", "the Chevening scholarship", "目的（奨学金、プログラムなど）", "チーヴニング奨学金"),
+    achievements: f("Thành tích nổi bật", "Key achievements", "GPA 3.6/4, nhóm đạt điểm cao nhất đồ án cuối kỳ, 2 năm trong CLB sinh viên", "GPA 3.6/4, top project in the class, 2 years in the student club", "主な実績", "GPA 3.6/4、学期末プロジェクトでクラス最高評価、学生クラブで2年間活動"),
+    originalSubject: f("Tiêu đề email đã gửi", "Original subject", "Xin gia hạn nộp bài Giải tích 1", "Extension request for Calculus 1", "送信済みメールの件名", "微積分学 I の課題提出期限延長のお願い"),
+    sentDate: f("Ngày đã gửi", "Date sent", "05/03/2026", "March 5, 2026", "送信日", "2026年3月5日"),
   };
   const COMMON_KEYS = ["recipient", "sender", "senderInfo"];
   const AREA_KEYS = new Set(["reason", "handover", "highlights", "achievements"]);
 
   const TONES = {
-    formal: { vi: { hi: "Kính gửi {{recipient}},", bye: "Trân trọng,\n{{sender}}" }, en: { hi: "Dear {{recipient}},", bye: "Best regards,\n{{sender}}" } },
-    friendly: { vi: { hi: "Chào {{recipient}},", bye: "Cảm ơn và thân mến,\n{{sender}}" }, en: { hi: "Hi {{recipient}},", bye: "Many thanks,\n{{sender}}" } },
+    formal: { vi: { hi: "Kính gửi {{recipient}},", bye: "Trân trọng,\n{{sender}}" }, en: { hi: "Dear {{recipient}},", bye: "Best regards,\n{{sender}}" }, ja: { hi: "{{recipient}} 様", bye: "何卒よろしくお願い申し上げます。\n{{sender}}" } },
+    friendly: { vi: { hi: "Chào {{recipient}},", bye: "Cảm ơn và thân mến,\n{{sender}}" }, en: { hi: "Hi {{recipient}},", bye: "Many thanks,\n{{sender}}" }, ja: { hi: "{{recipient}} さん", bye: "どうぞよろしくお願いします。\n{{sender}}" } },
   };
 
   const topic = (id, icon, name, subject, body) => ({
     id, icon, enabled: true,
-    name: { vi: name[0], en: name[1] }, subject: { vi: subject[0], en: subject[1] }, body: { vi: body[0], en: body[1] },
+    name: { vi: name[0], en: name[1], ja: name[2] ?? name[1] }, subject: { vi: subject[0], en: subject[1], ja: subject[2] ?? subject[1] }, body: { vi: body[0], en: body[1], ja: body[2] ?? body[1] },
   });
   const DEFAULT_TOPICS = [
     topic("leave_school", "🎒", ["Xin nghỉ học", "Absence from class"],
@@ -506,6 +505,21 @@ async function translateLines(text, to) { // MyMemory giới hạn ~500 ký tự
       ["Tôi viết thư này để hỏi thăm về email \"{{originalSubject}}\" mà tôi đã gửi vào ngày {{sentDate}}. Tôi hiểu {{recipient}} có thể đang rất bận, nên chỉ xin nhắc nhẹ để chắc rằng thư đã đến đúng nơi.\n\nNếu cần bổ sung thông tin gì, xin cứ cho tôi biết. Cảm ơn {{recipient}} rất nhiều.",
        "I am writing to follow up on my email \"{{originalSubject}}\", sent on {{sentDate}}. I understand you may be very busy, so this is just a gentle reminder to make sure it reached you.\n\nIf you need any additional information, please let me know. Thank you very much, {{recipient}}."]),
   ];
+  const JAPANESE_TOPICS = {
+    leave_school: ["授業の欠席連絡", "{{course}}の欠席について（{{date}}）", "{{sender}}と申します（{{senderInfo}}）。{{date}}の{{course}}の授業を欠席させていただきたく、ご連絡いたしました。理由は{{reason}}です。\n\n欠席した内容は資料を確認し、課題にも取り組みます。ご理解いただけますと幸いです。"],
+    leave_work: ["休暇のお願い", "{{date}}の休暇申請（{{sender}}）", "{{sender}}と申します（{{senderInfo}}）。{{reason}}のため、{{date}}に休暇をいただきたくお願い申し上げます。\n\n不在中の業務は{{handover}}の予定です。緊急時には電話で連絡可能です。\n\nご検討のほど、よろしくお願いいたします。"],
+    job_apply: ["求人への応募", "{{position}}への応募（{{sender}}）", "{{sender}}と申します（{{senderInfo}}）。{{company}}の{{position}}に応募したく、ご連絡いたしました。\n\n私の強みは{{highlights}}です。チームに貢献できると考えております。履歴書を添付いたしましたので、ご確認ください。\n\n{{recipient}}様とお話しできる機会をいただけますと幸いです。"],
+    internship: ["インターンシップのお願い", "{{company}}の{{position}}への応募", "{{sender}}と申します（{{senderInfo}}、専攻：{{major}}）。{{company}}に関心があり、{{duration}}の期間、{{position}}としてインターンシップに参加したくご連絡いたしました。\n\n貴社の環境で学び、任された業務に誠実に取り組みたいと考えております。履歴書を添付いたします。\n\n{{recipient}}様からのご返信をお待ちしております。"],
+    extension: ["課題提出期限の延長", "{{course}}の課題提出期限延長のお願い", "{{sender}}と申します（{{senderInfo}}）。{{course}}の課題について、提出期限を{{deadline}}から{{newDate}}まで延長していただきたくお願い申し上げます。\n\n理由は{{reason}}です。新しい期限までに必ず提出いたします。ご検討いただけますと幸いです。"],
+    thanks_interview: ["面接のお礼", "{{position}}の面接のお礼", "{{sender}}と申します。{{date}}に{{position}}の面接をしていただき、誠にありがとうございました。\n\n面接を通じて{{company}}について理解を深め、貴社で働きたいという思いが一層強くなりました。追加情報が必要でしたら、いつでもお知らせください。"],
+    resign: ["退職のご連絡", "退職のご連絡（{{sender}}）", "{{sender}}と申します。現在{{position}}を担当しております。このたび退職を希望し、最終出勤日を{{lastDay}}とさせていただきたく、ご連絡いたしました。\n\n理由は{{reason}}です。これまでのご支援に心より感謝申し上げます。業務の引き継ぎには責任を持って対応いたします。\n\nご確認のほど、よろしくお願いいたします。"],
+    recommend: ["推薦状のお願い", "{{purpose}}に関する推薦状のお願い", "{{sender}}と申します（{{senderInfo}}）。現在{{purpose}}に応募する準備をしており、{{deadline}}までに推薦状をご作成いただけないか、ご相談申し上げます。\n\nご参考までに、主な実績は{{achievements}}です。必要でしたら履歴書や成績証明書もお送りします。\n\nご検討いただき、誠にありがとうございます。"],
+    follow_up: ["返信のお願い", "先日お送りしたメールについて：{{originalSubject}}", "{{sentDate}}にお送りした「{{originalSubject}}」について、確認のためご連絡いたしました。ご多忙のところ恐縮ですが、メールが届いているかご確認いただけますでしょうか。\n\n追加情報が必要でしたらお知らせください。どうぞよろしくお願いいたします。"],
+  };
+  DEFAULT_TOPICS.forEach((tp) => {
+    const [name, subject, body] = JAPANESE_TOPICS[tp.id] || [];
+    if (name) { tp.name.ja = name; tp.subject.ja = subject; tp.body.ja = body; }
+  });
 
   // Bài mẫu ban đầu của diễn đàn (gồm 2 bài cũ của web KienBinh)
   const seedPosts = () => {
@@ -532,14 +546,14 @@ async function translateLines(text, to) { // MyMemory giới hạn ~500 ký tự
 
   // ---------- Chuỗi giao diện [VI, EN] ----------
   const UI = {
-    "nav.compose": ["✉️ Soạn email", "✉️ Compose"], "nav.drafts": ["⏰ Nháp & nhắc nhở", "⏰ Drafts & reminders"],
-    "nav.community": ["💌 Diễn đàn mẫu", "💌 Community"], "nav.admin": ["🔐 Quản trị", "🔐 Admin"],
-    "nav.developers": ["👥 Các nhà phát triển", "👥 Developers"], "dev.title": ["Đội ngũ MailMate", "The MailMate team"], "nav.upgrade": ["💎 Nâng cấp", "💎 Upgrade"],
-    "footer.product": ["MailMate", "MailMate"], "footer.features": ["Tính năng", "Features"], "footer.compose": ["Soạn email", "Compose email"], "footer.community": ["Diễn đàn mẫu", "Email examples"], "footer.support": ["Hỗ trợ", "Support"], "footer.reviews": ["Đánh giá", "Reviews"], "footer.note": ["Được tạo để giúp mỗi email trở nên rõ ràng hơn.", "Built to make every email clearer."],
-    "features.eyebrow": ["MỌI THỨ BẠN CẦN ĐỂ VIẾT TỐT HƠN", "EVERYTHING YOU NEED TO WRITE BETTER"], "features.title": ["Một không gian nhỏ, nhiều trợ giúp thiết thực.", "One thoughtful space, practical help at every step."], "features.copy": ["Từ email đầu tiên đến việc theo dõi phản hồi, MailMate giúp bạn sắp xếp lời nói và công việc rõ ràng hơn.", "From the first draft to following up, MailMate helps you communicate clearly and stay organized."], "features.composeTitle": ["Soạn email theo từng bước", "Step-by-step email writing"], "features.composeCopy": ["Chọn chủ đề, giọng điệu và điền thông tin để tạo bản nháp có cấu trúc rõ ràng.", "Choose a topic and tone, then fill in details to create a clear, structured draft."], "features.draftsTitle": ["Nháp và nhắc nhở", "Drafts and reminders"], "features.draftsCopy": ["Lưu email chưa gửi, đặt lịch nhắc và theo dõi việc cần làm tiếp theo.", "Save unsent emails, schedule reminders, and keep track of what comes next."], "features.communityTitle": ["Mẫu thư và góp ý cộng đồng", "Email examples and community feedback"], "features.communityCopy": ["Tham khảo ví dụ, chia sẻ kinh nghiệm và học cách viết phù hợp với từng tình huống.", "Explore examples, share experiences, and learn how to write for different situations."], "features.cta": ["Bắt đầu viết email ↘", "Start writing an email ↘"], "settings.title": ["Cài đặt", "Settings"], "settings.copy": ["Tùy chỉnh trải nghiệm của bạn.", "Customize your experience."], "settings.language": ["Ngôn ngữ giao diện", "Interface language"], "settings.time": ["Thời gian và vị trí", "Time and location"], "settings.timezone": ["Múi giờ", "Time zone"], "settings.location": ["Tên vị trí hiển thị", "Location label"], "settings.format": ["Định dạng giờ", "Time format"], "settings.timeHint": ["Bạn có thể đổi múi giờ hiển thị; đồng hồ không thay đổi giờ hệ thống của thiết bị.", "You can change the displayed time zone; this does not change your device's system clock."], "settings.save": ["Lưu cài đặt", "Save settings"], "settings.account": ["Tài khoản", "Account"], "settings.accountCopy": ["Đăng xuất khỏi phiên quản trị trên thiết bị này.", "Sign out of the admin session on this device."], "settings.logout": ["Đăng xuất quản trị", "Sign out of admin"] ,
+    "nav.compose": ["Soạn email", "Compose"], "nav.drafts": ["Nháp & nhắc nhở", "Drafts & reminders"],
+    "nav.community": ["Diễn đàn mẫu", "Community"], "nav.admin": ["Quản trị", "Admin"],
+    "nav.developers": ["Các nhà phát triển", "Developers"], "dev.title": ["Đội ngũ KhaBi.Mail", "The KhaBi.Mail team"], "nav.upgrade": ["Nâng cấp", "Upgrade"],
+    "footer.product": ["KhaBi.Mail", "KhaBi.Mail"], "footer.features": ["Tính năng", "Features"], "footer.compose": ["Soạn email", "Compose email"], "footer.community": ["Diễn đàn mẫu", "Email examples"], "footer.support": ["Hỗ trợ", "Support"], "footer.reviews": ["Đánh giá", "Reviews"], "footer.note": ["Được tạo để giúp mỗi email trở nên rõ ràng hơn.", "Built to make every email clearer."],
+    "features.eyebrow": ["MỌI THỨ BẠN CẦN ĐỂ VIẾT TỐT HƠN", "EVERYTHING YOU NEED TO WRITE BETTER"], "features.title": ["Một không gian nhỏ, nhiều trợ giúp thiết thực.", "One thoughtful space, practical help at every step."], "features.copy": ["Từ email đầu tiên đến việc theo dõi phản hồi, KhaBi.Mail giúp bạn sắp xếp lời nói và công việc rõ ràng hơn.", "From the first draft to following up, KhaBi.Mail helps you communicate clearly and stay organized."], "features.composeTitle": ["Soạn email theo từng bước", "Step-by-step email writing"], "features.composeCopy": ["Chọn chủ đề, giọng điệu và điền thông tin để tạo bản nháp có cấu trúc rõ ràng.", "Choose a topic and tone, then fill in details to create a clear, structured draft."], "features.draftsTitle": ["Nháp và nhắc nhở", "Drafts and reminders"], "features.draftsCopy": ["Lưu email chưa gửi, đặt lịch nhắc và theo dõi việc cần làm tiếp theo.", "Save unsent emails, schedule reminders, and keep track of what comes next."], "features.communityTitle": ["Mẫu thư và góp ý cộng đồng", "Email examples and community feedback"], "features.communityCopy": ["Tham khảo ví dụ, chia sẻ kinh nghiệm và học cách viết phù hợp với từng tình huống.", "Explore examples, share experiences, and learn how to write for different situations."], "features.cta": ["Bắt đầu viết email ↘", "Start writing an email ↘"], "settings.title": ["Cài đặt", "Settings"], "settings.copy": ["Tùy chỉnh trải nghiệm của bạn.", "Customize your experience."], "settings.language": ["Ngôn ngữ giao diện", "Interface language"], "settings.sound": ["Âm thanh nhắc nhở", "Reminder sounds"], "settings.ringtone": ["Nhạc chuông", "Ringtone"], "settings.volume": ["Âm lượng", "Volume"], "settings.testSound": ["Nghe thử", "Preview sound"], "settings.uploadSound": ["⬆ Tải MP3", "⬆ Upload MP3"], "settings.soundHint": ["Trên điện thoại, hãy bật âm lượng thiết bị và nghe thử một lần để cho phép trình duyệt phát âm thanh.", "On mobile, turn up your device volume and preview once to allow the browser to play sound."], "settings.time": ["Thời gian và vị trí", "Time and location"], "settings.timezone": ["Múi giờ", "Time zone"], "settings.location": ["Tên vị trí hiển thị", "Location label"], "settings.format": ["Định dạng giờ", "Time format"], "settings.timeHint": ["Bạn có thể đổi múi giờ hiển thị; đồng hồ không thay đổi giờ hệ thống của thiết bị.", "You can change the displayed time zone; this does not change your device's system clock."], "settings.save": ["Lưu cài đặt", "Save settings"], "settings.account": ["Tài khoản", "Account"], "settings.accountCopy": ["Đăng xuất khỏi phiên quản trị trên thiết bị này.", "Sign out of the admin session on this device."], "settings.logout": ["Đăng xuất quản trị", "Sign out of admin"] ,
     "hero.eyebrow": ["TRỢ LÝ EMAIL CỦA BẠN", "YOUR EMAIL WRITING COMPANION"], "hero.title": ["Viết email tốt hơn. Tự tin hơn.", "Write better emails. Feel more confident."], "hero.copy": ["Biến ý tưởng thành những email rõ ràng, chuyên nghiệp chỉ trong vài bước.", "Turn your ideas into clear, professional emails in just a few steps."], "hero.try": ["Try on web ↘", "Try on web ↘"], "hero.learn": ["Khám phá tính năng", "Explore features"], "hero.caption": ["Không gian viết thư dành cho sinh viên và người đi làm", "A thoughtful writing space for students and professionals"], "hero.trusted": ["Được nhiều đội ngũ hàng đầu tin tưởng", "Trusted by teams building what’s next"], "hero.disclaimer": ["Logo minh họa giao diện — không hàm ý hợp tác hoặc chứng thực chính thức.", "Illustrative logos for interface design only; no official affiliation or endorsement implied."],
     "clock.live": ["GIỜ ĐỊA PHƯƠNG · TRỰC TIẾP", "LIVE LOCAL TIME"], "clock.title": ["Một nhịp dừng giữa những email", "A mindful pause between emails"], "clock.copy": ["Thời gian đang trôi — hãy dành một phút để viết điều bạn muốn nói thật rõ ràng.", "Time keeps moving — take a moment to say what you mean, clearly."],
-    "upgrade.eyebrow": ["THÀNH VIÊN MAILMATE", "MAILMATE MEMBERSHIP"], "upgrade.title": ["Chọn không gian viết của bạn", "Choose your writing space"], "upgrade.copy": ["Bắt đầu miễn phí hoặc chọn gói phù hợp với nhu cầu.", "Start for free or choose a plan that fits your needs."], "upgrade.free1": ["Mẫu email cơ bản", "Essential email templates"], "upgrade.free2": ["Lưu nháp trên trình duyệt", "Save drafts in your browser"], "upgrade.go1": ["Quy trình viết mở rộng", "Expanded writing workflow"], "upgrade.go2": ["Hỗ trợ dự án MailMate", "Support the MailMate project"], "upgrade.pro1": ["Trải nghiệm nâng cao", "Enhanced experience"], "upgrade.pro2": ["Ủng hộ phát triển MailMate", "Support MailMate development"], "upgrade.freeBtn": ["Dùng miễn phí", "Use Free"], "upgrade.goBtn": ["Chọn Go", "Choose Go"], "upgrade.proBtn": ["Chọn Pro", "Choose Pro"], "upgrade.secure": ["THANH TOÁN", "PAYMENT"], "upgrade.qrCopy": ["Quét mã QR bằng ứng dụng ngân hàng. Hãy kiểm tra thông tin trước khi xác nhận.", "Scan the QR code with your banking app. Check the details before confirming."], "upgrade.qrNote": ["Website chưa tự động xác minh giao dịch. Vui lòng liên hệ quản trị viên sau khi thanh toán.", "Payments are not automatically verified yet. Please contact the administrator after paying."],
+    "upgrade.eyebrow": ["THÀNH VIÊN KHABI.MAIL", "KHABI.MAIL MEMBERSHIP"], "upgrade.title": ["Chọn không gian viết của bạn", "Choose your writing space"], "upgrade.copy": ["Bắt đầu miễn phí hoặc chọn gói phù hợp với nhu cầu.", "Start for free or choose a plan that fits your needs."], "upgrade.free1": ["Mẫu email cơ bản", "Essential email templates"], "upgrade.free2": ["Lưu nháp trên trình duyệt", "Save drafts in your browser"], "upgrade.go1": ["Quy trình viết mở rộng", "Expanded writing workflow"], "upgrade.go2": ["Hỗ trợ dự án KhaBi.Mail", "Support the KhaBi.Mail project"], "upgrade.pro1": ["Trải nghiệm nâng cao", "Enhanced experience"], "upgrade.pro2": ["Ủng hộ phát triển KhaBi.Mail", "Support KhaBi.Mail development"], "upgrade.freeBtn": ["Dùng miễn phí", "Use Free"], "upgrade.goBtn": ["Chọn Go", "Choose Go"], "upgrade.proBtn": ["Chọn Pro", "Choose Pro"], "upgrade.secure": ["THANH TOÁN", "PAYMENT"], "upgrade.qrCopy": ["Quét mã QR bằng ứng dụng ngân hàng. Hãy kiểm tra thông tin trước khi xác nhận.", "Scan the QR code with your banking app. Check the details before confirming."], "upgrade.qrNote": ["Website chưa tự động xác minh giao dịch. Vui lòng liên hệ quản trị viên sau khi thanh toán.", "Payments are not automatically verified yet. Please contact the administrator after paying."],
     "g.save": ["Lưu", "Save"], "g.cancel": ["Hủy", "Cancel"], "g.close": ["Đóng", "Close"],
     "err.storage": ["Không lưu được dữ liệu. Bộ nhớ trình duyệt có thể đã đầy hoặc bị chặn.", "Could not save data. Browser storage may be full or blocked."],
     "c.modeQuick": ["⚡ AI soạn nhanh", "⚡ Quick AI compose"], "c.modeTpl": ["🧩 Soạn theo chủ đề mẫu", "🧩 Compose from templates"],
@@ -548,7 +562,7 @@ async function translateLines(text, to) { // MyMemory giới hạn ~500 ký tự
     "c.mailLang": ["Ngôn ngữ email", "Email language"], "c.both": ["Song ngữ (VI + EN)", "Bilingual (VI + EN)"],
     "c.bilingualHint": ["Thông tin bạn nhập được giữ nguyên ở cả hai bản. Hãy ưu tiên tên, ngày tháng, số liệu, hoặc chỉnh trực tiếp bản dịch.", "What you type is kept as-is in both versions. Stick to names, dates and figures, or edit the translation directly."],
     "c.sample": ["Điền ví dụ", "Fill with an example"], "c.reset": ["Làm lại", "Start over"], "c.result": ["Bản thư của bạn", "Your email"],
-    "c.copy": ["📋 Sao chép", "📋 Copy"], "c.mailto": ["✉️ Mở ứng dụng mail", "✉️ Open in mail app"], "c.save": ["💾 Lưu nháp", "💾 Save draft"],
+    "c.copy": ["📋 Sao chép", "📋 Copy"], "c.mailto": ["✉️ Gửi qua email", "✉️ Send email"], "c.save": ["💾 Lưu nháp", "💾 Save draft"],
     "c.share": ["💌 Chia sẻ lên diễn đàn", "💌 Share to community"], "c.subject": ["Tiêu đề", "Subject"], "c.body": ["Nội dung", "Body"],
     "c.edited": ["Đã chỉnh tay", "Edited by hand"], "c.regen": ["Soạn lại từ mẫu", "Rewrite from template"],
     "c.missing": ["Còn {n} mục chưa điền, chúng hiện trong ngoặc vuông.", "{n} fields still empty. They show in square brackets."],
@@ -559,7 +573,7 @@ async function translateLines(text, to) { // MyMemory giới hạn ~500 ký tự
     "d.lead": ["Email chưa gửi sẽ được nhắc đúng giờ bạn chọn, để không bỏ sót thư quan trọng.", "Unsent emails nudge you at the time you pick, so nothing important slips by."],
     "d.fPending": ["Chưa gửi", "Unsent"], "d.fSent": ["Đã gửi", "Sent"], "d.fAll": ["Tất cả", "All"],
     "d.empty": ["Chưa có bản nháp nào. Soạn một email theo mẫu và bấm “Lưu nháp”.", "No drafts yet. Write an email from a template and press “Save draft”."],
-    "d.edit": ["Soạn tiếp", "Keep editing"], "d.send": ["Mở mail để gửi", "Open to send"], "d.markSent": ["Đã gửi", "Mark sent"], "d.markUnsent": ["Chưa gửi", "Mark unsent"],
+    "d.edit": ["Soạn tiếp", "Keep editing"], "d.send": ["✉️ Gửi qua email", "✉️ Send email"], "d.markSent": ["Đã gửi", "Mark sent"], "d.markUnsent": ["Chưa gửi", "Mark unsent"],
     "d.remind": ["Đặt nhắc", "Set reminder"], "d.delete": ["Xóa", "Delete"], "d.noRemind": ["Chưa đặt nhắc", "No reminder"],
     "d.remindAt": ["Nhắc lúc {t}", "Remind at {t}"], "d.overdue": ["Đã đến hạn nhắc", "Reminder due"], "d.updated": ["Cập nhật {t}", "Updated {t}"],
     "d.sentAt": ["Đã gửi {t}", "Sent {t}"], "d.confirmDelete": ["Xóa bản nháp này?", "Delete this draft?"], "d.saved": ["Đã lưu nháp", "Draft saved"],
@@ -581,13 +595,12 @@ async function translateLines(text, to) { // MyMemory giới hạn ~500 ký tự
     "m.author": ["Tên hiển thị (tùy chọn)", "Display name (optional)"], "m.submit": ["Đăng bài", "Publish"],
     "m.posted": ["Đã đăng mail mẫu", "Sample published"], "m.postedPending": ["Đã gửi. Bài sẽ hiện sau khi quản trị viên duyệt.", "Submitted. It will appear once an admin approves it."],
     "m.used": ["Đã nạp mẫu vào trình soạn thảo", "Template loaded into the editor"],
-    "a.title": ["Khu vực quản trị", "Admin area"], "a.gate": ["Nhập mã PIN để quản lý chủ đề, bài đăng và cài đặt. (Mặc định: 1234)", "Enter the PIN to manage topics, posts and settings. (Default: 1234)"],
-    "a.pin": ["Mã PIN", "PIN"], "a.login": ["Đăng nhập", "Sign in"], "a.wrongPin": ["Sai mã PIN, hãy thử lại.", "Wrong PIN, please try again."], "a.logout": ["Đăng xuất", "Sign out"],
+    "a.title": ["Khu vực quản trị", "Admin area"],
     "a.tabSettings": ["Cài đặt", "Settings"], "a.tabTopics": ["Chủ đề & mẫu", "Topics & templates"], "a.tabPosts": ["Kiểm duyệt", "Moderation"], "a.tabData": ["Dữ liệu", "Data"],
-    "a.siteName": ["Tên trang", "Site name"], "a.defUi": ["Ngôn ngữ giao diện mặc định", "Default interface language"], "a.defMail": ["Ngôn ngữ email mặc định", "Default email language"],
+    "a.defUi": ["Ngôn ngữ giao diện mặc định", "Default interface language"], "a.defMail": ["Ngôn ngữ email mặc định", "Default email language"],
     "a.defTone": ["Giọng điệu mặc định", "Default tone"], "a.autoRemind": ["Tự đặt nhắc sau (giờ, 0 = tắt)", "Auto-remind after (hours, 0 = off)"],
     "a.moderation": ["Duyệt bài trước khi hiển thị công khai", "Approve posts before they appear"], "a.allowComments": ["Cho phép góp ý dưới bài đăng", "Allow feedback on posts"],
-    "a.newPin": ["Đổi mã PIN (bỏ trống nếu giữ nguyên)", "Change PIN (leave empty to keep)"], "a.saved": ["Đã lưu cài đặt", "Settings saved"],
+    "a.saved": ["Đã lưu cài đặt", "Settings saved"],
     "a.addTopic": ["Thêm chủ đề", "Add topic"], "a.resetTopics": ["Khôi phục chủ đề mặc định", "Restore default topics"],
     "a.confirmResetTopics": ["Khôi phục toàn bộ chủ đề về mặc định? Các chỉnh sửa của bạn sẽ mất.", "Restore all topics to defaults? Your edits will be lost."],
     "a.confirmDelTopic": ["Xóa chủ đề này?", "Delete this topic?"], "a.confirmDelPost": ["Xóa bài đăng này?", "Delete this post?"],
@@ -602,8 +615,32 @@ async function translateLines(text, to) { // MyMemory giới hạn ~500 ký tự
     "a.confirmWipe": ["Xóa toàn bộ nháp mẫu, bài đăng và cài đặt quản trị? Không thể hoàn tác.", "Erase all template drafts, posts and admin settings? This cannot be undone."],
   };
 
-  Object.entries({"nav.compose": "✉️ メール作成", "nav.drafts": "⏰ 下書き＆リマインド", "nav.community": "💌 テンプレ広場", "nav.admin": "🔐 管理", "nav.developers": "👥 開発チーム", "dev.title": "MailMate チーム", "nav.upgrade": "💎 アップグレード", "features.eyebrow":"より良いメールを書くために", "features.title":"ひとつの場所に、実用的なサポートを。", "features.copy":"最初の下書きから返信のフォローアップまで、MailMate が明確なコミュニケーションを支援します。", "features.composeTitle":"ステップごとのメール作成", "features.composeCopy":"トピックとトーンを選び、情報を入力して構成の整った下書きを作成します。", "features.draftsTitle":"下書きとリマインダー", "features.draftsCopy":"未送信メールを保存し、リマインダーを設定して次の作業を管理します。", "features.communityTitle":"メール例とコミュニティの意見", "features.communityCopy":"例を参考にし、経験を共有し、状況に合った書き方を学びましょう。", "features.cta":"メール作成を始める ↘", "settings.title":"設定", "settings.copy":"使い方をカスタマイズします。", "settings.language":"表示言語", "settings.time":"時刻と場所", "settings.timezone":"タイムゾーン", "settings.location":"表示する場所", "settings.format":"時刻形式", "settings.timeHint":"表示するタイムゾーンを変更できます。端末のシステム時刻は変更されません。", "settings.save":"設定を保存", "settings.account":"アカウント", "settings.accountCopy":"この端末の管理者セッションからログアウトします。", "settings.logout":"管理者からログアウト", "hero.eyebrow": "あなたのメール作成アシスタント", "hero.title": "もっと良いメールを。もっと自信を。", "hero.copy": "アイデアを、わずか数ステップで明確でプロフェッショナルなメールに。", "hero.try": "Try on web ↘", "hero.learn": "機能を見る", "hero.caption": "学生と社会人のためのメール作成スペース", "hero.trusted": "多くのチームに信頼されています", "hero.disclaimer": "ロゴはデザイン見本です。公式な提携・推薦を示すものではありません。", "clock.live": "リアルタイム現地時刻", "clock.title": "メールの合間にひと呼吸", "clock.copy": "時間は流れています。伝えたいことを明確に書く時間を少し取りましょう。", "upgrade.eyebrow": "MAILMATE メンバーシップ", "upgrade.title": "自分に合ったプランを選ぶ", "upgrade.copy": "無料で始めるか、用途に合ったプランをお選びください。", "upgrade.free1": "基本メールテンプレート", "upgrade.free2": "ブラウザーに下書きを保存", "upgrade.go1": "拡張された作成ワークフロー", "upgrade.go2": "MailMate プロジェクトを支援", "upgrade.pro1": "高度な利用体験", "upgrade.pro2": "MailMate の開発を支援", "upgrade.freeBtn": "無料で使う", "upgrade.goBtn": "Go を選択", "upgrade.proBtn": "Pro を選択", "upgrade.secure": "お支払い", "upgrade.qrCopy": "銀行アプリで QR コードをスキャンし、確定前に情報をご確認ください。", "upgrade.qrNote": "現在、支払いは自動確認されません。支払い後、管理者にご連絡ください。", "g.save": "保存", "g.cancel": "キャンセル", "g.close": "閉じる", "c.modeQuick": "⚡ AIクイック作成", "c.modeTpl": "🧩 テンプレから作成", "c.step1": "1. トピックを選ぶ", "c.step2": "2. トーンと言語", "c.step3": "3. 情報を入力", "c.tone": "トーン", "c.formal": "丁寧", "c.friendly": "フレンドリー", "c.mailLang": "メールの言語", "c.both": "バイリンガル (VI + EN)", "c.sample": "例を入力", "c.reset": "やり直す", "c.result": "あなたのメール", "c.copy": "📋 コピー", "c.mailto": "✉️ メールアプリで開く", "c.save": "💾 下書き保存", "c.share": "💌 広場に共有", "c.subject": "件名", "c.body": "本文", "d.title": "下書き＆リマインド", "d.fPending": "未送信", "d.fSent": "送信済み", "d.fAll": "すべて", "d.edit": "編集を続ける", "d.send": "送信画面を開く", "d.markSent": "送信済みにする", "d.remind": "リマインド設定", "d.delete": "削除", "d.alert": "期限のリマインドが {n} 件あります", "d.alertBtn": "見る", "d.notifyTitle": "メール送信の時間です", "r.title": "このメールのリマインド", "r.none": "通知なし", "m.title": "テンプレ広場 💌", "m.post": "投稿する", "m.sortNew": "新着順", "m.sortTop": "人気順", "m.allTopics": "すべてのトピック", "a.title": "管理エリア"}).forEach(([k, v]) => UI[k] && (UI[k][2] = v));
-  Object.assign(UI, {"isl.snooze": ["Hoãn 10 phút", "Snooze 10 min", "10分後に再通知"], "isl.demo": ["Email xin nghỉ học (thử)", "Absence email (preview)", "欠席メール（テスト）"], "isl.big": ["Tệp quá lớn (tối đa 2MB)", "File too large (max 2MB)", "ファイルが大きすぎます（最大2MB）"], "rv.title": ["Khách hàng nói gì về MailMate", "What users say about MailMate", "利用者の声"], "rv.all": ["Tất cả", "All", "すべて"], "rv.pos": ["Tích cực", "Positive", "良い評価"], "rv.neg": ["Cần cải thiện", "Needs work", "改善点"]});
+  Object.entries({
+    "nav.compose":"メール作成", "nav.drafts":"下書きとリマインダー", "nav.community":"メール例", "nav.admin":"管理", "nav.developers":"開発チーム", "dev.title":"KhaBi.Mail 開発チーム", "nav.upgrade":"アップグレード",
+    "footer.features":"機能", "footer.compose":"メール作成", "footer.community":"メール例", "footer.support":"利用規約とポリシー", "footer.reviews":"レビュー", "footer.note":"メールをもっと明確に。",
+    "features.eyebrow":"より良いメールを書くために", "features.title":"ひとつの場所に、実用的なサポートを。", "features.copy":"最初の下書きから返信のフォローアップまで、KhaBi.Mail が明確なコミュニケーションを支援します。", "features.composeTitle":"ステップごとのメール作成", "features.composeCopy":"トピックとトーンを選び、情報を入力して構成の整った下書きを作成します。", "features.draftsTitle":"下書きとリマインダー", "features.draftsCopy":"未送信メールを保存し、リマインダーを設定して次の作業を管理します。", "features.communityTitle":"メール例とコミュニティのフィードバック", "features.communityCopy":"例を参考にし、経験を共有し、状況に合った書き方を学びましょう。", "features.cta":"メール作成を始める ↘",
+    "settings.title":"設定", "settings.copy":"使い方をカスタマイズします。", "settings.language":"表示言語", "settings.sound":"リマインダー音", "settings.ringtone":"着信音", "settings.volume":"音量", "settings.testSound":"試聴", "settings.uploadSound":"⬆ MP3をアップロード", "settings.soundHint":"モバイルでは端末の音量を上げ、最初に試聴してブラウザーの音声を有効にしてください。", "settings.time":"時刻と場所", "settings.timezone":"タイムゾーン", "settings.location":"表示する場所", "settings.format":"時刻形式", "settings.timeHint":"表示するタイムゾーンを変更できます。端末のシステム時刻は変更されません。", "settings.save":"設定を保存", "settings.account":"アカウント", "settings.logout":"ログアウト",
+    "hero.eyebrow":"メール作成アシスタント", "hero.title":"もっと良いメールを。もっと自信を。", "hero.copy":"アイデアを、わずか数ステップで明確でプロフェッショナルなメールに。", "hero.try":"Web で試す ↘", "hero.learn":"機能を見る", "hero.caption":"学生と社会人のためのメール作成スペース", "hero.trusted":"多くのチームに信頼されています", "hero.disclaimer":"ロゴはデザイン見本です。公式な提携・推薦を示すものではありません。",
+    "clock.live":"現地時刻・リアルタイム", "clock.title":"メールの合間にひと呼吸", "clock.copy":"時間は流れています。伝えたいことを明確に書く時間を少し取りましょう。",
+    "upgrade.eyebrow":"KHABI.MAIL メンバーシップ", "upgrade.title":"自分に合ったプランを選ぶ", "upgrade.copy":"無料で始めるか、用途に合ったプランをお選びください。", "upgrade.free1":"基本メールテンプレート", "upgrade.free2":"ブラウザーに下書きを保存", "upgrade.go1":"拡張された作成ワークフロー", "upgrade.go2":"KhaBi.Mail プロジェクトを支援", "upgrade.pro1":"高度な利用体験", "upgrade.pro2":"KhaBi.Mail の開発を支援", "upgrade.freeBtn":"無料で使う", "upgrade.goBtn":"Go を選択", "upgrade.proBtn":"Pro を選択", "upgrade.secure":"お支払い", "upgrade.qrCopy":"銀行アプリで QR コードをスキャンし、確定前に情報をご確認ください。", "upgrade.qrNote":"現在、支払いは自動確認されません。支払い後、管理者にご連絡ください。",
+    "g.save":"保存", "g.cancel":"キャンセル", "g.close":"閉じる", "err.storage":"保存できませんでした。ブラウザーのストレージを確認してください。",
+    "c.modeQuick":"⚡ AI クイック作成", "c.modeTpl":"🧩 テンプレートから作成", "c.step1":"1. トピックを選択", "c.step2":"2. トーンと言語", "c.step3":"3. 情報を入力", "c.tone":"トーン", "c.formal":"フォーマル", "c.friendly":"フレンドリー", "c.mailLang":"メールの言語", "c.both":"二言語（ベトナム語＋英語）", "c.bilingualHint":"入力した情報は両方の文面に反映されます。名前、日付、数値を確認し、必要に応じて翻訳を編集してください。", "c.sample":"入力例を使う", "c.reset":"やり直す", "c.result":"メール本文", "c.copy":"📋 コピー", "c.mailto":"✉️ メールを送信", "c.save":"💾 下書きを保存", "c.share":"💌 広場に共有", "c.subject":"件名", "c.body":"本文", "c.edited":"手動で編集済み", "c.regen":"テンプレートから再作成", "c.missing":"未入力の項目が {n} 件あります。角括弧内に表示されます。", "c.complete":"入力が完了しました。送信できます。", "c.copied":"メールをコピーしました", "c.editingDraft":"下書きを編集中", "c.noTopics":"トピックがありません。管理画面から追加できます。", "c.recipientEmail":"宛先メールアドレス", "c.recipientEmailPh":"name@example.com",
+    "d.title":"下書きとリマインダー", "d.lead":"未送信メールのリマインダーを設定して、大切なメールを忘れないようにしましょう。", "d.fPending":"未送信", "d.fSent":"送信済み", "d.fAll":"すべて", "d.empty":"下書きはまだありません。メールを作成して「下書きを保存」を押してください。", "d.edit":"編集を続ける", "d.send":"✉️ メールを送信", "d.markSent":"送信済みにする", "d.markUnsent":"未送信に戻す", "d.remind":"リマインダー設定", "d.delete":"削除", "d.noRemind":"リマインダーなし", "d.remindAt":"通知予定：{t}", "d.overdue":"通知時刻です", "d.updated":"更新：{t}", "d.sentAt":"送信済み：{t}", "d.confirmDelete":"この下書きを削除しますか？", "d.saved":"下書きを保存しました", "d.alert":"未送信メールのリマインダーが {n} 件あります", "d.alertBtn":"確認する", "d.notifyTitle":"メールを送信する時間です", "d.sendHint":"送信後、「送信済みにする」を押してリマインダーを停止してください。",
+    "r.title":"このメールのリマインダー", "r.lead":"指定時刻までに送信済みにしない場合、通知が届きます。", "r.time":"通知する日時", "r.q1h":"1時間後", "r.q1d":"1日後", "r.q3d":"3日後", "r.none":"通知しない",
+    "m.title":"メール例 💌", "m.lead":"メール例を参考にし、再利用したりフィードバックを投稿したりできます。", "m.search":"件名、本文、投稿者で検索…", "m.allTopics":"すべてのトピック", "m.sortNew":"新着順", "m.sortTop":"人気順", "m.post":"メール例を投稿", "m.privacy":"投稿前に氏名、電話番号、学生番号などの個人情報を削除してください。", "m.empty":"メール例が見つかりません。", "m.use":"テンプレートとして使う", "m.comments":"フィードバック（{n}）", "m.noComments":"フィードバックはまだありません。最初に投稿しましょう。", "m.commentPh":"フィードバックを書く…", "m.commentsOff":"フィードバック機能はオフです。", "m.name":"名前（任意）", "m.send":"フィードバックを送信", "m.anon":"匿名", "m.postTitle":"投稿タイトル", "m.topic":"トピック", "m.lang":"言語", "m.author":"表示名（任意）", "m.submit":"投稿する", "m.posted":"メール例を投稿しました", "m.postedPending":"投稿を受け付けました。管理者の承認後に表示されます。", "m.used":"テンプレートを編集画面に読み込みました。",
+    "a.title":"管理画面", "a.tabSettings":"設定", "a.tabTopics":"トピックとテンプレート", "a.tabPosts":"投稿の管理", "a.tabData":"データ", "a.defUi":"既定の表示言語", "a.defMail":"既定のメール言語", "a.defTone":"既定のトーン", "a.autoRemind":"リマインダーまでの時間（時間、0で無効）", "a.moderation":"公開前に投稿を確認する", "a.allowComments":"投稿へのフィードバックを許可する", "a.saved":"設定を保存しました", "a.addTopic":"トピックを追加", "a.resetTopics":"既定のトピックに戻す", "a.confirmResetTopics":"すべてのトピックを既定に戻しますか？編集内容は失われます。", "a.confirmDelTopic":"このトピックを削除しますか？", "a.confirmDelPost":"この投稿を削除しますか？", "a.edit":"編集", "a.delete":"削除", "a.approve":"承認", "a.statusPending":"承認待ち", "a.statusLive":"公開中", "a.noPosts":"投稿はありません。", "a.topicNew":"新しいトピック", "a.topicEdit":"トピックを編集", "a.topicSaved":"トピックを保存しました", "a.icon":"アイコン（絵文字）", "a.nameVi":"トピック名（ベトナム語）", "a.nameEn":"トピック名（英語）", "a.nameJa":"トピック名（日本語）", "a.subjVi":"件名テンプレート（ベトナム語）", "a.subjEn":"件名テンプレート（英語）", "a.subjJa":"件名テンプレート（日本語）", "a.bodyVi":"本文テンプレート（ベトナム語）", "a.bodyEn":"本文テンプレート（英語）", "a.bodyJa":"本文テンプレート（日本語）", "a.phHint":"{{field_name}} と入力してフォーム項目を作成します。使用できる項目：", "a.export":"データを書き出す（.json）", "a.import":"データを読み込む", "a.imported":"データを読み込みました", "a.badFile":"ファイル形式が正しくありません。", "a.wipe":"拡張データを削除", "a.confirmWipe":"テンプレートの下書き、投稿、管理設定をすべて削除しますか？元に戻せません。", "a.defUi":"既定の表示言語", "a.defMail":"既定のメール言語", "a.defTone":"既定のトーン", "a.confirmDelTopic":"このトピックを削除しますか？", "a.confirmDelPost":"この投稿を削除しますか？",
+  }).forEach(([k, v]) => { if (UI[k]) UI[k][2] = v; });
+  UI["settings.logout"] = ["Đăng xuất", "Sign out", "ログアウト"];
+  UI["d.preview"] = ["Xem toàn bộ email", "View full email", "メール全文を表示"];
+  UI["auth.signedIn"] = ["Xin chào", "Hello", "こんにちは"];
+  Object.assign(UI, {"isl.snooze": ["Hoãn 10 phút", "Snooze 10 min", "10分後に再通知"], "isl.demo": ["Email xin nghỉ học (thử)", "Absence email (preview)", "欠席メール（テスト）"], "isl.big": ["Tệp quá lớn (tối đa 2MB)", "File too large (max 2MB)", "ファイルが大きすぎます（最大2MB）"], "rv.title": ["Khách hàng nói gì về KhaBi.Mail", "What users say about KhaBi.Mail", "利用者の声"], "rv.like": ["Thích đánh giá này", "Like this review", "このレビューに「いいね」する"], "rv.signIn": ["Đăng nhập Google để thả tim.", "Sign in with Google to like.", "「いいね」するにはGoogleでログインしてください。"], "rv.likeError": ["Chưa thể cập nhật lượt thích. Hãy thử lại.", "Could not update your like. Please try again.", "いいねを更新できませんでした。もう一度お試しください。"], "rv.all": ["Tất cả", "All", "すべて"], "rv.pos": ["Tích cực", "Positive", "良い評価"], "rv.neg": ["Cần cải thiện", "Needs work", "改善点"]});
+
+  Object.assign(UI, {
+    "rv.disclaimer": ["Các trích dẫn bên dưới là nội dung minh họa do nhóm biên soạn, không phải xác nhận của những cá nhân được nhắc tên.", "The quotes below are team-created examples and are not endorsements by the people named.", "以下の引用はチームが作成した例であり、記載された人物による推薦や発言ではありません。"],
+    "a.reviewPhotos": ["Ảnh đánh giá minh họa", "Sample review photos", "サンプルレビューの写真"],
+    "a.reviewPhotosHint": ["Chọn hoặc xóa ảnh cho từng thẻ đánh giá. Ảnh được chia sẻ công khai trên trang.", "Choose or remove each sample review photo. These images are public on the site.", "サンプルレビューごとに写真を選択または削除できます。写真はサイト上で公開されます。"],
+    "a.reviewPhotoError": ["Không đọc được ảnh PNG này. Hãy chọn tệp PNG hợp lệ, tối đa 5 MB.", "Couldn't read this PNG. Choose a valid PNG file under 5 MB.", "PNG画像を読み込めません。5 MB以下の有効なPNGファイルを選択してください。"],
+  });
 
   // ---------- Tiện ích ----------
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -629,17 +666,31 @@ async function translateLines(text, to) { // MyMemory giới hạn ~500 ký tự
     write(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); if ([KEYS.drafts].includes(k)) window.dispatchEvent(new CustomEvent("mailmate:data-changed", { detail: { key: k } })); } catch { toast(t("err.storage"), "error"); } },
   };
   let config = { ...DEFAULT_CONFIG, ...Store.read(KEYS.config, {}) };
+  delete config.siteName;
+  delete config.pin;
   let drafts = Store.read(KEYS.drafts, []);
+  let quickDrafts = Store.read("mm_drafts", []);
   let posts = Store.read(KEYS.posts, null) ?? seedPosts();
   let liked = Store.read(KEYS.liked, []);
   let uiLang = Store.read(KEYS.ui, null) ?? config.uiLang;
   let currentView = "compose";
   let adminGoogleAllowed = false;
+  let googleProfile = { uid: null, displayName: "", photoURL: "" };
   const saveConfig = () => Store.write(KEYS.config, config);
   const saveDrafts = () => Store.write(KEYS.drafts, drafts);
   const savePosts = () => Store.write(KEYS.posts, posts);
   const isAdmin = () => adminGoogleAllowed;
-  const getTopics = () => config.topics ?? DEFAULT_TOPICS;
+  const getTopics = () => {
+    const topics = config.topics ?? DEFAULT_TOPICS;
+    topics.forEach((tp) => {
+      const base = DEFAULT_TOPICS.find((x) => x.id === tp.id);
+      tp.name ??= {}; tp.subject ??= {}; tp.body ??= {};
+      tp.name.ja ??= base?.name.ja ?? tp.name.en ?? "メール";
+      tp.subject.ja ??= base?.subject.ja ?? tp.subject.en ?? "メールの件名";
+      tp.body.ja ??= base?.body.ja ?? tp.body.en ?? "本文を入力してください。";
+    });
+    return topics;
+  };
   const liveTopics = () => getTopics().filter((x) => x.enabled !== false);
   const findTopic = (id) => getTopics().find((x) => x.id === id);
   const editableTopics = () => (config.topics ??= clone(DEFAULT_TOPICS));
@@ -655,11 +706,24 @@ async function translateLines(text, to) { // MyMemory giới hạn ~500 ký tự
     qa("[data-i18n]").forEach((el) => { if (UI[el.dataset.i18n]) el.textContent = t(el.dataset.i18n); });
     qa("[data-i18n-ph]").forEach((el) => { el.placeholder = t(el.dataset.i18nPh); });
     qa("[data-ui-lang]").forEach((b) => b.classList.toggle("active", b.dataset.uiLang === uiLang));
-    q("#siteName").textContent = config.siteName;
-    const h1 = q(".wrap > h1"); if (h1 && h1.firstChild) h1.firstChild.textContent = config.siteName + " ";
-    document.title = config.siteName + " – " + (uiLang === "vi" ? "Soạn email hoàn chỉnh" : "Write polished emails");
+    const languageNames = {
+      vi: { vi: "Tiếng Việt", en: "Tiếng Anh", ja: "Tiếng Nhật" },
+      en: { vi: "Vietnamese", en: "English", ja: "Japanese" },
+      ja: { vi: "ベトナム語", en: "英語", ja: "日本語" },
+    }[uiLang];
+    ["#formSettings [name=uiLang]", "#formSettings [name=mailLang]", "#formPost [name=lang]"].forEach((selector) => {
+      qa(`${selector} option`).forEach((option) => { if (languageNames[option.value]) option.textContent = languageNames[option.value]; });
+    });
+    const settingsLabel = ({ vi: "Cài đặt", en: "Settings", ja: "設定" })[uiLang];
+    [q("#openSettings"), q("#settingsGear")].filter(Boolean).forEach((button) => { button.title = settingsLabel; button.setAttribute("aria-label", settingsLabel); });
+    q("#rst").title = ({ vi: "Đặt lại màu", en: "Reset colors", ja: "色をリセット" })[uiLang];
+    q("#theme-toggle").title = ({ vi: "Sáng / tối", en: "Light / dark", ja: "ライト / ダーク" })[uiLang];
+    q("#dockMain").setAttribute("aria-label", ({ vi: "Màu sắc", en: "Colors", ja: "カラー" })[uiLang]);
+    q("#siteName").textContent = SITE_NAME;
+    const h1 = q(".wrap > h1"); if (h1 && h1.firstChild) h1.firstChild.textContent = SITE_NAME + " ";
+    document.title = SITE_NAME + " – " + ({ vi: "Soạn email hoàn chỉnh", en: "Write polished emails", ja: "メールを作成" })[uiLang];
   }
-  function setUiLang(l) { uiLang = l; Store.write(KEYS.ui, l); applyI18n(); renderAll(); }
+  function setUiLang(l) { uiLang = l; Store.write(KEYS.ui, l); applyI18n(); renderAll(); window.dispatchEvent(new Event("mailmate:language-changed")); }
 
   // ---------- Toast & hộp thoại ----------
   function toast(msg, type = "") {
@@ -678,11 +742,11 @@ async function translateLines(text, to) { // MyMemory giới hạn ~500 ký tự
   }
 
   // ---------- Trình soạn theo mẫu ----------
-  const cs = {};
+  const cs = { to: "" };
   const mailLangs = () => (cs.mailLang === "both" ? ["vi", "en"] : [cs.mailLang]);
   const currentTopic = () => findTopic(cs.topicId);
   function resetComposer() {
-    Object.assign(cs, { topicId: liveTopics()[0]?.id ?? null, tone: config.tone, mailLang: config.mailLang, values: {}, outputs: {}, dirty: {}, draftId: null });
+    Object.assign(cs, { topicId: liveTopics()[0]?.id ?? null, tone: config.tone, mailLang: config.mailLang, values: {}, outputs: {}, dirty: {}, draftId: null, to: "" });
   }
   const isPristine = () => !cs.draftId && !Object.values(cs.values).some(Boolean) && !Object.keys(cs.dirty).length;
   function topicKeys(tp) {
@@ -703,11 +767,11 @@ async function translateLines(text, to) { // MyMemory giới hạn ~500 ký tự
     const list = (ml === "both" ? ["vi", "en"] : [ml]).map((l) => outputs[l]);
     return list.length === 1 ? list[0] : { subject: list.map((o) => o.subject).join(" / "), body: list.map((o) => o.body).join(SEPARATOR) };
   };
-  const mailtoUrl = (m) => `mailto:?subject=${encodeURIComponent(m.subject)}&body=${encodeURIComponent(m.body)}`;
-  const gmailUrl = (m) => `https://mail.google.com/mail/?view=cm&fs=1&su=${encodeURIComponent(m.subject)}&body=${encodeURIComponent(m.body)}`;
+  const gmailUrl = (m, to = "") => `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(to)}&su=${encodeURIComponent(m.subject)}&body=${encodeURIComponent(m.body)}`;
 
   function renderComposer() {
     q("#tone").value = cs.tone; q("#mailLang").value = cs.mailLang;
+    q("#tplRecipientEmail").value = cs.to || "";
     q("#bilingualHint").hidden = cs.mailLang !== "both";
     q("#editingBadge").hidden = !cs.draftId;
     renderTopics(); renderFields(); generate(); renderOutputs();
@@ -778,6 +842,7 @@ async function translateLines(text, to) { // MyMemory giới hạn ~500 ký tự
     });
     q("#tone").addEventListener("change", (e) => { cs.tone = e.target.value; cs.dirty = {}; renderComposer(); });
     q("#mailLang").addEventListener("change", (e) => { cs.mailLang = e.target.value; renderComposer(); });
+    q("#tplRecipientEmail").addEventListener("input", (e) => { cs.to = e.target.value; });
     q("#fields").addEventListener("input", (e) => { const k = e.target.dataset.key; if (!k) return; cs.values[k] = e.target.value; generate(); syncOutputs(); });
     const out = q("#outputs");
     out.addEventListener("input", (e) => {
@@ -794,14 +859,19 @@ async function translateLines(text, to) { // MyMemory giới hạn ~500 ký tự
     q("#btnSample").addEventListener("click", fillSample);
     q("#btnReset").addEventListener("click", () => { resetComposer(); renderComposer(); });
     q("#btnCopy").addEventListener("click", async () => { const m = mergeOutputs(cs.outputs, cs.mailLang); await copyText(`${t("c.subject")}: ${m.subject}\n\n${m.body}`); toast(t("c.copied")); });
-    q("#btnMail").addEventListener("click", () => { window.location.href = mailtoUrl(mergeOutputs(cs.outputs, cs.mailLang)); });
-    q("#btnGmail").addEventListener("click", () => { window.open(gmailUrl(mergeOutputs(cs.outputs, cs.mailLang)), "_blank", "noopener"); });
+    q("#btnMail").addEventListener("click", (e) => { const mail = mergeOutputs(cs.outputs, cs.mailLang); if (/đính kèm|\bCV\b|attach|添付/i.test(mail.body) && !confirm(t("att.ask"))) return e.preventDefault(); window.open(gmailUrl(mail, cs.to), "_blank", "noopener"); });
     q("#btnSave").addEventListener("click", saveDraft);
     q("#btnShare").addEventListener("click", shareCurrent);
+    q("#btnQuickShare").addEventListener("click", () => {
+      const map = { "nghi-hoc": "leave_school", "nop-tre": "extension", "gia-han": "extension", "ung-tuyen": "job_apply", "thu-gioi-thieu": "recommend", "hoc-bong": "recommend", "phuc-khao": "leave_school", "xin-gap": "follow_up", "doi-lich": "follow_up", "tai-lieu": "leave_school", "cam-on": "thanks_interview", "xin-loi": "leave_school", "nghi-viec": "resign", "nhac-lai": "follow_up", "khac": "leave_school" };
+      const selected = QTOPICS.find((x) => x[0] === q("#topic").value);
+      const lang = ["vi", "en", "ja"].includes(q("#lang").value) ? q("#lang").value : "en";
+      openPostDialog({ title: selected?.[2][QI()] || t("m.post"), topicId: map[q("#topic").value] || liveTopics()[0]?.id, lang, subject: q("#subj").value, body: q("#body").value });
+    });
   }
 
   // ---------- Nháp & nhắc nhở ----------
-  let draftFilter = "pending"; let reminderCallback = null;
+  let draftFilter = "pending"; let reminderCallback = null; let reminderTimer = 0;
   const autoRemindAt = () => (config.autoRemindHours > 0 ? Date.now() + config.autoRemindHours * 36e5 : null);
   const isOverdue = (d) => d.status !== "sent" && d.remindAt && d.remindAt <= Date.now();
   function openReminder(ms, cb) { reminderCallback = cb; q("#remindInput").value = ms ? toLocalInput(ms) : ""; q("#dlgReminder").showModal(); }
@@ -809,21 +879,31 @@ async function translateLines(text, to) { // MyMemory giới hạn ~500 ký tự
     if (!mailLangs().every((l) => cs.outputs[l])) return;
     const existing = drafts.find((d) => d.id === cs.draftId);
     openReminder(existing ? existing.remindAt : autoRemindAt(), (remindAt) => {
-      const data = { topicId: cs.topicId, tone: cs.tone, mailLang: cs.mailLang, values: clone(cs.values), outputs: clone(cs.outputs), dirty: clone(cs.dirty),
+      const data = { kind: "template", to: cs.to || "", topicId: cs.topicId, tone: cs.tone, mailLang: cs.mailLang, values: clone(cs.values), outputs: clone(cs.outputs), dirty: clone(cs.dirty),
         subject: mergeOutputs(cs.outputs, cs.mailLang).subject, remindAt, notified: false, updatedAt: Date.now() };
-      if (existing) Object.assign(existing, data);
+      if (existing) { Object.assign(existing, data, { status: "draft", sentAt: null }); }
       else { cs.draftId = uid(); drafts.unshift({ id: cs.draftId, status: "draft", createdAt: Date.now(), ...data }); q("#editingBadge").hidden = false; }
       saveDrafts(); toast(t("d.saved")); refreshDrafts();
     });
   }
+  function quickDraftViews() {
+    return quickDrafts.map((d) => {
+      const language = d.language || d.mailLang || "vi";
+      return { ...d, id: `quick-${d.id}`, legacyId: d.id, kind: "quick", subject: d.subject ?? d.subj ?? "", to: d.to || "",
+        mailLang: language, outputs: { [language]: { subject: d.subject ?? d.subj ?? "", body: d.body || "" } },
+        status: d.status || "draft", createdAt: d.createdAt || d.id, updatedAt: d.updatedAt || d.id, remindAt: d.remindAt || null };
+    });
+  }
+  const allDrafts = () => [...drafts, ...quickDraftViews()].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
   function renderDrafts() {
-    const list = drafts.filter((d) => draftFilter === "all" || (draftFilter === "sent") === (d.status === "sent"));
+    const list = allDrafts().filter((d) => draftFilter === "all" || (draftFilter === "sent") === (d.status === "sent"));
     q("#draftList").innerHTML = list.length ? list.map(draftCard).join("") : `<p class="empty">${t("d.empty")}</p>`;
     qa("#draftTabs button").forEach((b) => b.classList.toggle("active", b.dataset.filter === draftFilter));
   }
   function draftCard(d) {
     const tp = findTopic(d.topicId);
     const out = d.outputs[d.mailLang === "both" ? "vi" : d.mailLang] ?? Object.values(d.outputs)[0];
+    const full = mergeOutputs(d.outputs, d.mailLang);
     const sent = d.status === "sent"; const overdue = isOverdue(d);
     const chip = sent ? `<span class="chip chip-ok">${t("d.sentAt", { t: fmt(d.sentAt ?? d.updatedAt) })}</span>`
       : overdue ? `<span class="chip chip-danger">${t("d.overdue")}</span>`
@@ -832,8 +912,10 @@ async function translateLines(text, to) { // MyMemory giới hạn ~500 ký tự
       <div class="chips">${tp ? `<span class="chip">${esc(tp.icon)} ${esc((tp.name[uiLang] ?? tp.name.en))}</span>` : ""}
         <span class="chip chip-lang">${d.mailLang === "both" ? "VI + EN" : d.mailLang.toUpperCase()}</span>${chip}</div>
       <h3>${esc(d.subject)}</h3><p class="snippet">${esc(out?.body ?? "")}</p><p class="note">${t("d.updated", { t: fmt(d.updatedAt) })}</p>
+      <details class="draft-preview"><summary>${t("d.preview")}</summary><div class="mail-preview"><strong>${esc(full.subject)}</strong><pre>${esc(full.body)}</pre></div></details>
       <div class="bar">
         <button type="button" class="btn" data-act="edit">${t("d.edit")}</button>
+        <button type="button" class="btn" data-act="copy">${t("c.copy")}</button>
         ${sent ? "" : `<button type="button" class="btn" data-act="send">${t("d.send")}</button>`}
         <button type="button" class="btn" data-act="toggle">${sent ? t("d.markUnsent") : t("d.markSent")}</button>
         ${sent ? "" : `<button type="button" class="btn" data-act="remind">${t("d.remind")}</button>`}
@@ -841,36 +923,70 @@ async function translateLines(text, to) { // MyMemory giới hạn ~500 ký tự
   }
   function onDraftAction(act, d) {
     if (act === "edit") {
-      loadIntoComposer({ topicId: d.topicId, tone: d.tone, mailLang: d.mailLang, draftId: d.id, values: clone(d.values), outputs: clone(d.outputs),
+      if (d.kind === "quick") {
+        const original = quickDrafts.find((x) => String(x.id) === String(d.legacyId)); if (!original) return;
+        window.mailmateQuickEditingId = original.id;
+        q("#topic").value = original.topicId || q("#topic").value; q("#qTone").value = original.tone || q("#qTone").value;
+        q("#lang").value = original.language || q("#lang").value;
+        Object.entries(original.inputs || {}).forEach(([id, value]) => { const field = q(`#${id}`); if (field) field.value = value; });
+        q("#to").value = d.to; q("#subj").value = d.subject; q("#body").value = Object.values(d.outputs)[0]?.body || "";
+        updateGmailLink(); q("#out").hidden = false; q("#empty").hidden = true; q("#editingBadge").hidden = true;
+        go("compose"); setMode("quick"); return;
+      }
+      loadIntoComposer({ topicId: d.topicId, tone: d.tone, mailLang: d.mailLang, draftId: d.id, to: d.to || "", values: clone(d.values), outputs: clone(d.outputs),
         dirty: !findTopic(d.topicId) ? { vi: true, en: true } : clone(d.dirty) });
       return;
-    } else if (act === "send") { toast(t("d.sendHint")); window.location.href = mailtoUrl(mergeOutputs(d.outputs, d.mailLang)); }
+    } else if (act === "copy") { const m = mergeOutputs(d.outputs, d.mailLang); copyText(`${t("c.subject")}: ${m.subject}\n\n${m.body}`).then(() => toast(t("c.copied"))); return; }
+    else if (act === "send") { const m = mergeOutputs(d.outputs, d.mailLang); if (/đính kèm|\bCV\b|attach|添付/i.test(m.body) && !confirm(t("att.ask"))) return; toast(t("d.sendHint")); window.open(gmailUrl(m, d.to), "_blank", "noopener"); return; }
     else if (act === "toggle") { d.status = d.status === "sent" ? "draft" : "sent"; d.sentAt = d.status === "sent" ? Date.now() : null; d.notified = false; }
-    else if (act === "remind") return openReminder(d.remindAt, (ms) => { d.remindAt = ms; d.notified = false; persistDrafts(); });
-    else if (act === "delete") { if (!confirm(t("d.confirmDelete"))) return; drafts = drafts.filter((x) => x.id !== d.id); if (cs.draftId === d.id) cs.draftId = null; }
-    persistDrafts();
+    else if (act === "remind") return openReminder(d.remindAt, (ms) => { d.remindAt = ms; d.notified = false; d.updatedAt = Date.now(); persistItem(d); });
+    else if (act === "delete") { if (!confirm(t("d.confirmDelete"))) return; if (d.kind === "quick") quickDrafts = quickDrafts.filter((x) => String(x.id) !== String(d.legacyId)); else { drafts = drafts.filter((x) => x.id !== d.id); if (cs.draftId === d.id) cs.draftId = null; } }
+    persistItem(d);
+  }
+  function persistItem(d) {
+    if (d.kind === "quick") {
+      const original = quickDrafts.find((x) => String(x.id) === String(d.legacyId));
+      if (original) Object.assign(original, { status: d.status, sentAt: d.sentAt || null, remindAt: d.remindAt || null, notified: Boolean(d.notified), updatedAt: d.updatedAt || Date.now() });
+      store("mm_drafts", quickDrafts);
+      renderDrafts(); renderDraftBadge(); checkReminders();
+    } else persistDrafts();
   }
   const persistDrafts = () => { saveDrafts(); refreshDrafts(); };
   function refreshDrafts() { renderDrafts(); renderDraftBadge(); checkReminders(); }
   function renderDraftBadge() {
-    const n = drafts.filter((d) => d.status !== "sent").length; const b = q("#draftBadge");
+    const n = allDrafts().filter((d) => d.status !== "sent").length; const b = q("#draftBadge");
     b.hidden = !n; b.textContent = n;
   }
   function checkReminders() {
-    const due = drafts.filter(isOverdue); const fresh = due.filter((d) => !d.notified);
+    const due = allDrafts().filter(isOverdue); const fresh = due.filter((d) => !d.notified);
     fresh.forEach((d) => {
       d.notified = true; ringIsland(d);
-      if ("Notification" in window && Notification.permission === "granted") new Notification(t("d.notifyTitle"), { body: d.subject });
+      try { if ("Notification" in window && Notification.permission === "granted") new Notification(t("d.notifyTitle"), { body: d.subject }); } catch (error) { console.warn("Browser notification unavailable", error); }
     });
-    if (fresh.length) saveDrafts();
+    fresh.filter((d) => d.kind === "quick").forEach((d) => { const original = quickDrafts.find((x) => String(x.id) === String(d.legacyId)); if (original) original.notified = true; });
+    if (fresh.some((d) => d.kind === "quick")) store("mm_drafts", quickDrafts);
+    if (fresh.some((d) => d.kind !== "quick")) saveDrafts();
     const bar = q("#alertBar"); bar.hidden = !due.length;
     if (due.length) bar.innerHTML = `<span>⏰ ${t("d.alert", { n: due.length })}</span><button type="button" class="btn" data-go="drafts">${t("d.alertBtn")}</button>`;
     if (currentView === "drafts" && fresh.length) renderDrafts();
+    scheduleReminderCheck();
+  }
+  function scheduleReminderCheck() {
+    clearTimeout(reminderTimer);
+    const next = allDrafts().filter((d) => d.status !== "sent" && d.remindAt && !d.notified).reduce((at, d) => Math.min(at, d.remindAt), Infinity);
+    if (Number.isFinite(next)) reminderTimer = setTimeout(checkReminders, Math.max(0, Math.min(next - Date.now(), 2_147_000_000)));
   }
   function bindDrafts() {
+    window.addEventListener("mailmate:save-quick-draft", (event) => {
+      const d = event.detail || {}; const id = d.id || Date.now(); const existing = quickDrafts.find((x) => String(x.id) === String(id));
+      const item = { ...existing, ...d, id, subject: d.subj || "", status: "draft", sentAt: null, remindAt: existing?.remindAt || (config.autoRemindHours > 0 ? Date.now() + config.autoRemindHours * 36e5 : null), notified: false, createdAt: existing?.createdAt || id, updatedAt: Date.now() };
+      delete item.subj;
+      if (existing) Object.assign(existing, item); else quickDrafts.unshift(item);
+      store("mm_drafts", quickDrafts); refreshDrafts();
+    });
     q("#draftTabs").addEventListener("click", (e) => { if (!e.target.dataset.filter) return; draftFilter = e.target.dataset.filter; renderDrafts(); });
     q("#draftList").addEventListener("click", (e) => {
-      const btn = e.target.closest("[data-act]"); const d = btn && drafts.find((x) => x.id === btn.closest(".draft-card").dataset.id);
+      const btn = e.target.closest("[data-act]"); const d = btn && allDrafts().find((x) => x.id === btn.closest(".draft-card").dataset.id);
       if (d) onDraftAction(btn.dataset.act, d);
     });
     const form = q("#formReminder");
@@ -883,7 +999,7 @@ async function translateLines(text, to) { // MyMemory giới hạn ~500 ký tự
     q("#remindNone").addEventListener("click", () => finish(null));
     qa("[data-mins]", form).forEach((b) => b.addEventListener("click", () => { q("#remindInput").value = toLocalInput(Date.now() + Number(b.dataset.mins) * 6e4); }));
     document.addEventListener("visibilitychange", () => { if (!document.hidden) checkReminders(); });
-    setInterval(checkReminders, 30000);
+    scheduleReminderCheck();
   }
 
   // ---------- Diễn đàn / cộng đồng ----------
@@ -912,7 +1028,7 @@ async function translateLines(text, to) { // MyMemory giới hạn ~500 ký tự
   function renderDetail() {
     const p = posts.find((x) => x.id === openPostId); if (!p) return q("#dlgDetail").close();
     const tp = findTopic(p.topicId);
-    const comments = p.comments.length ? p.comments.map((c) => `<li class="comment"><strong>${esc(c.name || t("m.anon"))}</strong><small>${fmt(c.createdAt)}</small><p>${esc(c.text)}</p>
+    const comments = p.comments.length ? p.comments.map((c) => `<li class="comment">${c.photoURL?.startsWith("https://") ? `<img class="comment-avatar" src="${esc(c.photoURL)}" alt="">` : ""}<strong>${esc(c.name || t("m.anon"))}</strong><small>${fmt(c.createdAt)}</small><p>${esc(c.text)}</p>
       ${isAdmin() ? `<button type="button" class="link" data-act="delcomment" data-cid="${esc(c.id)}">${t("a.delete")}</button>` : ""}</li>`).join("") : `<li class="note">${t("m.noComments")}</li>`;
     q("#detailBody").innerHTML = `
       <div class="detail-head"><div class="chips">${tp ? `<span class="chip">${esc(tp.icon)} ${esc((tp.name[uiLang] ?? tp.name.en))}</span>` : ""}<span class="chip chip-lang">${esc(p.lang.toUpperCase())}</span></div>
@@ -957,7 +1073,7 @@ async function translateLines(text, to) { // MyMemory giới hạn ~500 ký tự
     detail.addEventListener("click", (e) => { const b = e.target.closest("[data-act]"); const p = posts.find((x) => x.id === openPostId); if (b && p) onPostAction(b.dataset.act, p, b.dataset.cid); });
     detail.addEventListener("submit", (e) => {
       e.preventDefault(); const p = posts.find((x) => x.id === openPostId); const d = new FormData(e.target);
-      p.comments.push({ id: uid(), name: d.get("name").trim(), text: d.get("text").trim(), createdAt: Date.now() });
+      p.comments.push({ id: uid(), name: d.get("name").trim() || googleProfile.displayName || "", photoURL: googleProfile.photoURL || "", text: d.get("text").trim(), createdAt: Date.now() });
       savePosts(); renderCommunity(); renderDetail(); detail.scrollTop = detail.scrollHeight;
     });
     q("#formPost").addEventListener("submit", (e) => {
@@ -971,21 +1087,20 @@ async function translateLines(text, to) { // MyMemory giới hạn ~500 ký tự
   // ---------- Quản trị ----------
   let adminTab = "settings"; let editingTopicId = null;
   function renderAdmin() {
-    const ok = isAdmin(); q("#formLogin").hidden = true; q("#adminPanel").hidden = !ok; if (!ok) return;
+    const ok = isAdmin(); q("#adminPanel").hidden = !ok; if (!ok) return;
     qa("#adminTabs [data-tab]").forEach((b) => b.classList.toggle("active", b.dataset.tab === adminTab));
     qa(".admin-pane").forEach((p) => { p.hidden = p.dataset.pane !== adminTab; });
-    fillSettings(); renderAdminTopics(); renderAdminPosts();
+    fillSettings(); renderReviewPhotoSettings(); renderAdminTopics(); renderAdminPosts();
   }
   function fillSettings() {
     const el = q("#formSettings").elements;
-    ["siteName", "uiLang", "mailLang", "tone", "autoRemindHours"].forEach((k) => { el[k].value = config[k]; });
-    el.moderation.checked = config.moderation; el.comments.checked = config.comments; el.newPin.value = "";
+    ["uiLang", "mailLang", "tone", "autoRemindHours"].forEach((k) => { el[k].value = config[k]; });
+    el.moderation.checked = config.moderation; el.comments.checked = config.comments;
   }
   function saveSettings(form) {
     const el = form.elements;
-    Object.assign(config, { siteName: el.siteName.value.trim() || DEFAULT_CONFIG.siteName, uiLang: el.uiLang.value, mailLang: el.mailLang.value, tone: el.tone.value,
+    Object.assign(config, { uiLang: el.uiLang.value, mailLang: el.mailLang.value, tone: el.tone.value,
       autoRemindHours: Math.max(0, Number(el.autoRemindHours.value) || 0), moderation: el.moderation.checked, comments: el.comments.checked });
-    if (el.newPin.value) config.pin = el.newPin.value;
     saveConfig(); applyI18n(); if (isPristine()) { resetComposer(); renderComposer(); } toast(t("a.saved"));
   }
   function renderAdminTopics() {
@@ -998,14 +1113,15 @@ async function translateLines(text, to) { // MyMemory giới hạn ~500 ký tự
     editingTopicId = id; const tp = id ? findTopic(id) : null; const el = q("#formTopic").elements;
     q("#topicDlgTitle").textContent = t(tp ? "a.topicEdit" : "a.topicNew");
     q("#phList").innerHTML = Object.keys(FIELDS).map((k) => `<code>{{${k}}}</code>`).join("");
-    el.icon.value = tp?.icon ?? "✉️"; el.nameVi.value = tp?.name.vi ?? ""; el.nameEn.value = tp?.name.en ?? "";
-    el.subjVi.value = tp?.subject.vi ?? ""; el.subjEn.value = tp?.subject.en ?? ""; el.bodyVi.value = tp?.body.vi ?? ""; el.bodyEn.value = tp?.body.en ?? "";
+    el.icon.value = tp?.icon ?? "✉️"; el.nameVi.value = tp?.name.vi ?? ""; el.nameEn.value = tp?.name.en ?? ""; el.nameJa.value = tp?.name.ja ?? "";
+    el.subjVi.value = tp?.subject.vi ?? ""; el.subjEn.value = tp?.subject.en ?? ""; el.subjJa.value = tp?.subject.ja ?? "";
+    el.bodyVi.value = tp?.body.vi ?? ""; el.bodyEn.value = tp?.body.en ?? ""; el.bodyJa.value = tp?.body.ja ?? "";
     q("#dlgTopic").showModal();
   }
   function saveTopic(form) {
     const el = form.elements;
-    const data = { icon: el.icon.value.trim(), name: { vi: el.nameVi.value.trim(), en: el.nameEn.value.trim() },
-      subject: { vi: el.subjVi.value.trim(), en: el.subjEn.value.trim() }, body: { vi: el.bodyVi.value.trim(), en: el.bodyEn.value.trim() } };
+    const data = { icon: el.icon.value.trim(), name: { vi: el.nameVi.value.trim(), en: el.nameEn.value.trim(), ja: el.nameJa.value.trim() },
+      subject: { vi: el.subjVi.value.trim(), en: el.subjEn.value.trim(), ja: el.subjJa.value.trim() }, body: { vi: el.bodyVi.value.trim(), en: el.bodyEn.value.trim(), ja: el.bodyJa.value.trim() } };
     const list = editableTopics(); const ex = list.find((x) => x.id === editingTopicId);
     if (ex) Object.assign(ex, data); else list.push({ id: "custom_" + uid(), enabled: true, ...data });
     saveConfig(); q("#dlgTopic").close(); refreshTopics(); toast(t("a.topicSaved"));
@@ -1039,15 +1155,11 @@ async function translateLines(text, to) { // MyMemory giới hạn ~500 ký tự
     try {
       const d = JSON.parse(await file.text());
       if (!Array.isArray(d.drafts) || !Array.isArray(d.posts) || typeof d.config !== "object") throw new Error("shape");
-      config = { ...DEFAULT_CONFIG, ...d.config, pin: config.pin }; drafts = d.drafts; posts = d.posts;
+      config = { ...DEFAULT_CONFIG, ...d.config }; delete config.siteName; delete config.pin; drafts = d.drafts; posts = d.posts;
       saveConfig(); saveDrafts(); savePosts(); resetComposer(); applyI18n(); renderAll(); toast(t("a.imported"));
     } catch { toast(t("a.badFile"), "error"); }
   }
   function bindAdmin() {
-    q("#formLogin").addEventListener("submit", (e) => {
-      e.preventDefault();
-    });
-    q("#btnLogout").addEventListener("click", () => q("#googleSignOut")?.click());
     q("#adminTabs").addEventListener("click", (e) => { if (!e.target.dataset.tab) return; adminTab = e.target.dataset.tab; renderAdmin(); });
     q("#formSettings").addEventListener("submit", (e) => { e.preventDefault(); saveSettings(e.target); });
     q("#btnAddTopic").addEventListener("click", () => openTopicDialog());
@@ -1120,6 +1232,8 @@ async function translateLines(text, to) { // MyMemory giới hạn ~500 ký tự
     resetComposer(); bindDialogs(); bindComposer(); bindDrafts(); bindCommunity(); bindAdmin();
     window.addEventListener("mailmate:auth-state", (event) => {
       adminGoogleAllowed = event.detail?.isAdmin === true;
+      googleProfile = { uid: event.detail?.uid || null, displayName: event.detail?.displayName || "", photoURL: event.detail?.photoURL || "" };
+      q(".nav")?.classList.toggle("has-admin", adminGoogleAllowed);
       const adminTab = q('.nav [data-v="admin"]');
       if (adminTab) adminTab.hidden = !adminGoogleAllowed;
       if (!adminGoogleAllowed && currentView === "admin") show("compose");
@@ -1128,12 +1242,13 @@ async function translateLines(text, to) { // MyMemory giới hạn ~500 ký tự
     });
     window.addEventListener("mailmate:cloud-updated", () => {
       drafts = Store.read(KEYS.drafts, []);
+      quickDrafts = Store.read("mm_drafts", []);
       const profile = store("mm_profile") || {};
       PF.forEach((id) => { const input = q("#" + id); if (input && profile[id] != null) input.value = profile[id]; });
-      drawDrafts(); renderAll();
+      renderAll();
     });
     const clockPrefs = () => ({ timezone: localStorage.getItem("mm_timezone") || "Asia/Ho_Chi_Minh", location: localStorage.getItem("mm_location") || "", format: localStorage.getItem("mm_time_format") || "24" });
-    const updateLiveClock = () => { const now = new Date(), prefs = clockPrefs(), locale = ({vi:"vi-VN",en:"en-GB",ja:"ja-JP"})[uiLang] || "vi-VN", options = {hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:prefs.format === "12",timeZone:prefs.timezone}; try { const time = now.toLocaleTimeString(locale, options); const date = now.toLocaleDateString(locale,{weekday:"long",year:"numeric",month:"long",day:"numeric",timeZone:prefs.timezone}); q("#liveClock").textContent = time; q("#liveDate").textContent = date; q("#floatingTime").textContent = time; q("#floatingDate").textContent = now.toLocaleDateString(locale,{day:"2-digit",month:"short",year:"numeric",timeZone:prefs.timezone}); q("#floatingLocation").textContent = prefs.location || prefs.timezone; } catch { q("#floatingTime").textContent = now.toLocaleTimeString(locale, options); } };
+    const updateLiveClock = () => { const now = new Date(), prefs = clockPrefs(), locale = ({vi:"vi-VN",en:"en-GB",ja:"ja-JP"})[uiLang] || "vi-VN", options = {hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:prefs.format === "12",timeZone:prefs.timezone}; try { const time = now.toLocaleTimeString(locale, options); const date = now.toLocaleDateString(locale,{weekday:"long",year:"numeric",month:"long",day:"numeric",timeZone:prefs.timezone}); q("#liveClock").textContent = time; q("#liveDate").textContent = date; q("#floatingTime").textContent = time; q("#floatingDate").textContent = now.toLocaleDateString(locale,{day:"2-digit",month:"short",year:"numeric",timeZone:prefs.timezone}); q("#floatingLocation").textContent = prefs.location || ({vi:"Hồ Chí Minh (UTC+7)",en:"Ho Chi Minh City (UTC+7)",ja:"ホーチミン市（UTC+7）"})[uiLang]; } catch { q("#floatingTime").textContent = now.toLocaleTimeString(locale, options); } };
     updateLiveClock(); setInterval(updateLiveClock, 1000);
     const scrollToView = (id) => setTimeout(() => { const target = q(id); if (target) smoothScrollTo(target); }, 140);
     document.addEventListener("click", (e) => {
@@ -1154,14 +1269,14 @@ async function translateLines(text, to) { // MyMemory giới hạn ~500 ký tự
     q("#tryWeb").addEventListener("click", () => { show("compose"); scrollToView("#vCompose"); });
     q("#heroLearn").addEventListener("click", () => scrollToView("#features"));
     q("#featureTry").addEventListener("click", () => { show("compose"); scrollToView("#vCompose"); });
-    q("#openSettings").addEventListener("click", () => { const prefs = clockPrefs(); q("#settingsTimezone").value = prefs.timezone; q("#settingsLocation").value = prefs.location; q("#settingsTimeFormat").value = prefs.format; q("#settingsDialog").showModal(); });
+    [q("#openSettings"), q("#settingsGear")].filter(Boolean).forEach((button) => button.addEventListener("click", () => { const prefs = clockPrefs(); q("#settingsTimezone").value = prefs.timezone; q("#settingsLocation").value = prefs.location; q("#settingsTimeFormat").value = prefs.format; q("#settingsDialog").showModal(); }));
+    q("#googleSignOut").addEventListener("click", () => q("#settingsDialog").close());
     q("#closeSettings").addEventListener("click", () => q("#settingsDialog").close());
     q("#settingsDialog").addEventListener("click", (e) => { if (e.target === q("#settingsDialog")) q("#settingsDialog").close(); });
     q("#saveSettings").addEventListener("click", () => { localStorage.setItem("mm_timezone", q("#settingsTimezone").value); localStorage.setItem("mm_location", q("#settingsLocation").value.trim()); localStorage.setItem("mm_time_format", q("#settingsTimeFormat").value); updateLiveClock(); q("#settingsDialog").close(); });
-    q("#settingsLogout").addEventListener("click", () => { q("#settingsDialog").close(); q("#googleSignOut")?.click(); });
     q("#openUpgrade").addEventListener("click", () => q("#upgradeDialog").showModal());
     q("#closeUpgrade").addEventListener("click", () => q("#upgradeDialog").close());
-    q("#upgradeDialog").addEventListener("click", (e) => { if (e.target === q("#upgradeDialog")) q("#upgradeDialog").close(); const b = e.target.closest("[data-plan]"); if (!b) return; if (b.dataset.plan === "free") { q("#upgradeDialog").close(); return; } const go = b.dataset.plan === "go"; q("#qrPayment").hidden = false; q("#qrTitle").textContent = go ? "Thanh toán MailMate Go" : "Thanh toán MailMate Pro"; q("#qrAmount").textContent = go ? "1807¥" : "2008¥"; smoothScrollTo(q("#qrPayment")); });
+    q("#upgradeDialog").addEventListener("click", (e) => { if (e.target === q("#upgradeDialog")) q("#upgradeDialog").close(); const b = e.target.closest("[data-plan]"); if (!b) return; if (b.dataset.plan === "free") { q("#upgradeDialog").close(); return; } const go = b.dataset.plan === "go"; q("#qrPayment").hidden = false; q("#qrTitle").textContent = go ? "Thanh toán KhaBi.Mail Go" : "Thanh toán KhaBi.Mail Pro"; q("#qrAmount").textContent = go ? "1807¥" : "2008¥"; smoothScrollTo(q("#qrPayment")); });
     q(".nav").addEventListener("click", (e) => { const b = e.target.closest(".tab"); if (!b) return; if (b.dataset.v) { show(b.dataset.v); scrollToView({compose:"#vCompose",drafts:"#vDrafts",forum:"#vForum",admin:"#vAdmin"}[b.dataset.v]); } });
     const updateLanguageButtons = () => qa("[data-ui-lang]").forEach((b) => b.classList.toggle("active", b.dataset.uiLang === uiLang));
     qa("[data-ui-lang]").forEach((b) => b.addEventListener("click", () => { setUiLang(b.dataset.uiLang); updateLanguageButtons(); }));
@@ -1183,12 +1298,14 @@ async function translateLines(text, to) { // MyMemory giới hạn ~500 ký tự
   q("#dockMain").addEventListener("click", () => q("#theme").classList.toggle("open"));
 
   // ---------- Nhạc chuông (tự tạo bằng Web Audio, hoặc tải nhạc của bạn) ----------
-  let actx, ringTimer, ringStop, ringAudio;
-  const RTK = "mm2.ring"; const ring = Store.read(RTK, { id: "chime" });
+  let actx, ringTimer, ringStop, ringAudio, ringMediaGain;
+  const RTK = "mm2.ring"; const ring = Store.read(RTK, { id: "chime", volume: 80 });
+  if (!Number.isFinite(Number(ring.volume))) ring.volume = 80;
+  const ringLevel = () => Math.max(0, Math.min(100, Number(ring.volume))) / 50;
   const tone = (f, s, d, ty = "sine", g = 0.2) => {
     const o = actx.createOscillator(), n = actx.createGain(), t0 = actx.currentTime + s;
     o.type = ty; o.frequency.value = f; o.connect(n); n.connect(actx.destination);
-    n.gain.setValueAtTime(1e-4, t0); n.gain.exponentialRampToValueAtTime(g, t0 + 0.02); n.gain.exponentialRampToValueAtTime(1e-4, t0 + d);
+    n.gain.setValueAtTime(1e-4, t0); n.gain.exponentialRampToValueAtTime(Math.max(1e-4, g * ringLevel()), t0 + 0.02); n.gain.exponentialRampToValueAtTime(1e-4, t0 + d);
     o.start(t0); o.stop(t0 + d + 0.05);
   };
   const RINGS = {
@@ -1197,11 +1314,11 @@ async function translateLines(text, to) { // MyMemory giới hạn ~500 ký tự
     pulse: () => [0, 0.25, 0.5].forEach((s) => { tone(1200, s, 0.12, "square", 0.07); tone(1800, s + 0.1, 0.12, "square", 0.05); }),
     classic: () => [0, 0.3, 0.6, 0.9].forEach((s) => tone(988, s, 0.18, "sawtooth", 0.1)),
   };
-  const FILES = { iphone: "sounds/iphone.mp3", tone2: "sounds/tone2.mp3" };
+  const FILES = { iphone: "nhac_chuong_thong_bao_iphone-www_tiengdong_com.mp3", tone2: "AQOmGWRB7LWESaIzLTObn4KjmIZGF90mnjSMRdFGlCd5VwPnEZpBcXVMHHkju2xX4nS4Pv3R8Kt9Ch6RNex0HEejgPvAHMRJbqxT.mp3" };
   const sweep = (f1, f2, s, d, g = 0.2) => {
     const o = actx.createOscillator(), n = actx.createGain(), t0 = actx.currentTime + s;
     o.frequency.setValueAtTime(f1, t0); o.frequency.exponentialRampToValueAtTime(f2, t0 + d); o.connect(n); n.connect(actx.destination);
-    n.gain.setValueAtTime(1e-4, t0); n.gain.exponentialRampToValueAtTime(g, t0 + 0.02); n.gain.exponentialRampToValueAtTime(1e-4, t0 + d); o.start(t0); o.stop(t0 + d + 0.05);
+    n.gain.setValueAtTime(1e-4, t0); n.gain.exponentialRampToValueAtTime(Math.max(1e-4, g * ringLevel()), t0 + 0.02); n.gain.exponentialRampToValueAtTime(1e-4, t0 + d); o.start(t0); o.stop(t0 + d + 0.05);
   };
   Object.assign(RINGS, {
     bubble: () => [0, 0.22, 0.44].forEach((s, i) => sweep(400 + i * 150, 1200 + i * 200, s, 0.18, 0.25)),
@@ -1214,27 +1331,34 @@ async function translateLines(text, to) { // MyMemory giới hạn ~500 ký tự
   });
   function startRing() {
     stopRing();
+    const playFallback = () => { actx ??= new (window.AudioContext || window.webkitAudioContext)(); actx.resume().then(() => (RINGS[ring.id] || RINGS.chime)()).catch(() => {}); };
     const play = () => {
+      if (ringLevel() === 0) return;
       if ((ring.id === "custom" && ring.data) || FILES[ring.id]) {
-        if (!ringAudio) { ringAudio = new Audio(FILES[ring.id] || ring.data); ringAudio.loop = true; }
-        ringAudio.play().catch(() => {});
+        if (!ringAudio) {
+          ringAudio = new Audio(FILES[ring.id] || ring.data); ringAudio.loop = true;
+          try { actx ??= new (window.AudioContext || window.webkitAudioContext)(); const source = actx.createMediaElementSource(ringAudio); ringMediaGain = actx.createGain(); ringMediaGain.gain.value = Math.min(2, ringLevel()); source.connect(ringMediaGain); ringMediaGain.connect(actx.destination); } catch { ringMediaGain = null; ringAudio.volume = Math.min(1, ringLevel()); }
+        }
+        if (actx?.state === "suspended") actx.resume().catch(() => {});
+        ringAudio.play().catch(playFallback);
       } else {
-        actx ??= new (window.AudioContext || window.webkitAudioContext)();
-        actx.resume().then(() => (RINGS[ring.id] || RINGS.chime)()).catch(() => {});
+        playFallback();
       }
     };
     play(); ringTimer = setInterval(play, 2800); ringStop = setTimeout(stopRing, 30000);
   }
-  function stopRing() { clearInterval(ringTimer); clearTimeout(ringStop); ringAudio?.pause(); ringAudio = null; }
+  function stopRing() { clearInterval(ringTimer); clearTimeout(ringStop); ringAudio?.pause(); ringAudio = null; ringMediaGain = null; }
   const rs = q("#ringSel");
   q("#ringSel [value=custom]").hidden = !ring.data; rs.value = ring.id;
+  const ringVolume = q("#ringVolume"); ringVolume.value = ring.volume; q("#ringVolumeValue").value = `${ring.volume}%`;
+  ringVolume.oninput = () => { ring.volume = Number(ringVolume.value); q("#ringVolumeValue").value = `${ring.volume}%`; Store.write(RTK, ring); if (ringMediaGain) ringMediaGain.gain.value = Math.min(2, ringLevel()); else if (ringAudio) ringAudio.volume = Math.min(1, ringLevel()); };
   rs.onchange = () => { ring.id = rs.value; Store.write(RTK, ring); startRing(); setTimeout(stopRing, 3500); };
-  q("#ringTest").onclick = () => ringIsland({ subject: t("isl.demo") }, true);
+  q("#ringTest").onclick = () => { startRing(); setTimeout(stopRing, 3500); };
   q("#ringFile").onchange = (e) => {
     const f = e.target.files[0]; if (!f) return;
     if (f.size > 2e6) return toast(t("isl.big"), "error");
     const r = new FileReader();
-    r.onload = () => { Object.assign(ring, { id: "custom", data: r.result, name: f.name }); Store.write(RTK, ring); q("#ringSel [value=custom]").hidden = false; rs.value = "custom"; toast("🔔 " + f.name); };
+    r.onload = () => { Object.assign(ring, { id: "custom", data: r.result, name: f.name }); Store.write(RTK, ring); q("#ringSel [value=custom]").hidden = false; rs.value = "custom"; toast("🔔 " + f.name); startRing(); setTimeout(stopRing, 3500); };
     r.readAsDataURL(f);
   };
 
@@ -1258,34 +1382,89 @@ async function translateLines(text, to) { // MyMemory giới hạn ~500 ký tự
   }
   isl.addEventListener("click", (e) => {
     const a = e.target.dataset.i; if (!a) return;
-    const d = drafts.find((x) => x.id === isl.dataset.id);
+    const d = allDrafts().find((x) => x.id === isl.dataset.id);
     if (a === "open") go("drafts");
     if (d && a === "sent") { d.status = "sent"; d.sentAt = Date.now(); }
     if (d && a === "snooze") { d.remindAt = Date.now() + 6e5; d.notified = false; }
-    if (d) persistDrafts();
+    if (d) persistItem(d);
     closeIsland();
   });
 
-  // ---------- Góp ý của khách hàng (nhân vật hư cấu, có cả tích cực & tiêu cực) ----------
-  // Muốn dùng ảnh thật của bạn bè/đồng đội (đã được đồng ý) thì thêm img: "link-ảnh" vào từng mục.
+  // ---------- Trích dẫn minh họa ----------
+  // These are user-supplied parody/sample quotes, not verified endorsements.
   const REVIEWS = [
-    { n: "Trường Giang", h: "@hoichieu.mua", e: "👩🏻‍🎓", s: 5, l: 128, t: { vi: "Soạn mail xin nghỉ học chưa đến 1 phút, thầy trả lời luôn. Quá tiện!", en: "Wrote my absence email in under a minute and my professor replied right away." } },
-    { n: "Hoàng Long", h: "@long.dev", e: "🧑🏽‍💻", s: 5, l: 96, t: { vi: "Dark mode đẹp, đổi màu mượt như app iPhone. Thông báo nhắc gửi mail kiểu Dynamic Island xịn thật.", en: "Beautiful dark mode and buttery colour switching. The Dynamic Island reminder is slick." } },
-    { n: "Sakura T.", h: "@sakura_t", e: "👩🏻", s: 5, l: 74, t: { vi: "Có cả tiếng Nhật nên mình gửi mail cho giáo sư rất tự tin.", en: "日本語のメールも作れて、とても助かります！" } },
-    { n: "Quốc Bảo", h: "@baoquoc", e: "👨🏻‍🎤", s: 4.5, l: 41, t: { vi: "Mẫu email đủ dùng, diễn đàn có nhiều ví dụ hay để tham khảo.", en: "Good templates and plenty of useful samples on the community board." } },
-    { n: "Linh Chi", h: "@chi.linh", e: "👩🏻‍🦰", s: 3.5, l: 22, t: { vi: "Mẫu hay nhưng chưa có đăng nhập Google để đồng bộ nháp giữa các máy.", en: "Nice templates, but no Google sign-in to sync drafts across devices." } },
-    { n: "Anh Tuấn", h: "@tuan_it", e: "🧔🏻", s: 2, l: 15, t: { vi: "Nhạc chuông hơi to, suýt làm cả lớp giật mình 😅 mong có chỉnh âm lượng.", en: "The ringtone is loud and startled the whole class 😅 please add a volume slider." } },
-    { n: "Emily R.", h: "@emily.r", e: "👩🏼", s: 2, l: 9, t: { vi: "Bản dịch tự động đôi lúc chưa tự nhiên, vẫn phải tự sửa lại.", en: "The auto-translation sometimes sounds unnatural, I still have to edit it by hand." } },
+    { n: "Trường Giang", h: "@hoichieu.mua", img: "images (3).jpg", s: 5, l: 0, t: { vi: "Hồi chiều, hồi chiều trời mưa không viết email được, nhờ web này mà hồi chiều trời mưa vẫn viết được email", en: "This afternoon, it was raining and I couldn't write an email. Thanks to this website, I could still write one despite the rain.", ja: "今日の午後は雨でメールを書けませんでしたが、このサイトのおかげで雨の中でもメールを書けました。" } },
+    { n: "Thầy Sin", h: "@thaysin.jp", img: "401704366_2293820810790057_707816050373895322_n.jpg", s: 5, l: 0, t: { vi: "Nhậu", en: "Let's have a drink.", ja: "飲み会" } },
+    { n: "Jack97", h: "@domdom.97", img: "1791303347987_2635866528626212469_g7115695663991843873_67e88cc076ac2f14d79a246612119d63.jpg", s: 5, l: 0, t: { vi: "Web quá tiện lợi, tui có thể gửi mail cho vợ con chỉ trong 1 cú nhấp chuột, đúng là đáng 5 triệu /1 tháng", en: "This site is so convenient. I can email my wife and kids in one click. It's definitely worth 5 million a month.", ja: "とても便利なサイトです。ワンクリックで妻や子どもにメールを送れます。月500万ドンの価値があります。" } },
+    { n: "Trấn Thành", h: "@thanhcry", img: "1791304285305_8006327316155743741_g7115695663991843873_2bb3041c7d625d63dd94845c9b1c1b75.jpg", s: 5, l: 0, t: { vi: "Đời sinh viên viết mail khó hơn mọi người nghĩ nhiều ai muốn viết mail nhanh, hay lên web này để thấy 4 chữ ‘Hào quang rực rỡ’ là như thế nào😭😭", en: "Writing emails as a student is harder than people think. If you want to write quickly, visit this site and see what ‘dazzling glory’ really means 😭😭", ja: "学生にとってメールを書くのは思ったより大変です。早く書きたい人はこのサイトで「まばゆい栄光」の意味を体験してください😭😭" } },
+    { n: "Lý Huỳnh Mi", h: "@huynhmi", img: "1791304310069_8853694501496187455_g7115695663991843873_7152ee93d418b32e1b44ef1782ca8cde.jpg", s: 5, l: 0, t: { vi: "Cái gì lớp CNVN có mà các trường khác không có?\nTrang web KhaBi.Mail", en: "What does the CNVN class have that other schools don't?\nThe KhaBi.Mail website.", ja: "CNVNクラスにあって、他の学校にはないものは？\nKhaBi.Mailです。" } },
+    { n: "Steve Jobs", h: "@stevejobsVietNam", img: "1791303599338_7021010249188130958_g7115695663991843873_c41095f2d4d43ff7eafadfc0b8130a85.jpg", s: 5, l: 0, t: { vi: "Nếu lúc còn sống tôi biết đến trang web này, tôi đã không phải mất thời gian tự viết email từ chối hợp tác với IBM. Công cụ này thực sự là \"The Next Big Thing\" – Thứ duy nhất cứu rỗi được kỹ năng giao tiếp đang gãy cánh của các bạn sinh viên hiện nay. Biết thế này ngày xưa tôi bảo Apple mua lại cái web này rồi tích hợp luôn vào hệ sinh thái.", en: "If I had known about this website while I was alive, I wouldn't have wasted time writing an email myself to decline IBM's partnership. This tool really is \"The Next Big Thing\" – the only thing that can save today's students' crumbling communication skills. If only I'd known, I would have told Apple to acquire this site and integrate it into the ecosystem.", ja: "生きているうちにこのウェブサイトを知っていたら、IBMとの提携を断るメールを自分で書く時間を無駄にせずに済んだでしょう。このツールは本当に「The Next Big Thing」――今の学生たちの崩れかけたコミュニケーション能力を救える唯一のものです。知っていたら、Appleにこのサイトを買収してエコシステムに統合するよう言っていたのに。" } },
   ];
   let rvF = "all";
+  let reviewAvatars = {};
+  const reviewLikeCounts = new Map(); const myReviewLikes = new Set();
+  const partnerDialog = q("#partnerDialog");
+  q(".trusted-logos").addEventListener("click", (event) => {
+    const logo = event.target.closest("button[data-image]"); if (!logo) return;
+    const team = logo.dataset.team; q("#partnerTitle").textContent = team; q("#partnerImage").alt = `Hình ảnh ${team}`; q("#partnerImage").src = logo.dataset.image;
+    partnerDialog.showModal();
+  });
+  q("#closePartnerDialog").addEventListener("click", () => partnerDialog.close());
+  partnerDialog.addEventListener("click", (event) => { if (event.target === partnerDialog) partnerDialog.close(); });
+  async function compressedReviewPhoto(file) {
+    const bitmap = await createImageBitmap(file);
+    const scale = Math.min(1, 384 / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale)); canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+    const context = canvas.getContext("2d"); context.fillStyle = "#fff"; context.fillRect(0, 0, canvas.width, canvas.height); context.drawImage(bitmap, 0, 0, canvas.width, canvas.height); bitmap.close?.();
+    const blob = await new Promise((resolve, reject) => canvas.toBlob((value) => value ? resolve(value) : reject(new Error("image")), "image/jpeg", 0.72));
+    return await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = () => reject(new Error("image")); reader.readAsDataURL(blob); });
+  }
+  function renderReviewPhotoSettings() {
+    const host = q("#reviewPhotoControls"); if (!host) return;
+    host.innerHTML = REVIEWS.map((review, index) => `<div class="review-photo-row"><span><strong>${esc(review.n)}</strong><small>${reviewAvatars[index] ? "Ảnh tùy chỉnh" : "Ảnh mặc định"}</small></span><input type="file" data-review-photo="${index}" accept="image/png" aria-label="Ảnh ${esc(review.n)}"><button type="button" class="btn" data-remove-review-photo="${index}" ${reviewAvatars[index] ? "" : "disabled"}>Xóa ảnh</button></div>`).join("");
+  }
+  function saveReviewPhotos() { window.dispatchEvent(new CustomEvent("mailmate:save-review-photos", { detail: { avatars: reviewAvatars } })); }
+  q("#reviewPhotoControls").addEventListener("change", async (event) => {
+    const input = event.target.closest("input[data-review-photo]"); const file = input?.files?.[0]; if (!file) return;
+    if (file.type !== "image/png" || file.size > 5 * 1024 * 1024) { toast(t("a.reviewPhotoError"), "error"); input.value = ""; return; }
+    try {
+      const photo = await compressedReviewPhoto(file);
+      if (photo.length > 180_000) throw new Error("image");
+      reviewAvatars[input.dataset.reviewPhoto] = photo; saveReviewPhotos(); renderReviewPhotoSettings(); renderReviews();
+    } catch { toast(t("a.reviewPhotoError"), "error"); }
+  });
+  q("#reviewPhotoControls").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-remove-review-photo]"); if (!button || !reviewAvatars[button.dataset.removeReviewPhoto]) return;
+    delete reviewAvatars[button.dataset.removeReviewPhoto]; saveReviewPhotos(); renderReviewPhotoSettings(); renderReviews();
+  });
+  window.addEventListener("mailmate:review-photos", (event) => { reviewAvatars = event.detail?.avatars || {}; renderReviewPhotoSettings(); renderReviews(); });
   function renderReviews() {
     qa("#rvFilter button").forEach((b) => b.classList.toggle("active", b.dataset.f === rvF));
-    q("#rvGrid").innerHTML = REVIEWS.filter((r) => rvF === "all" || (rvF === "pos") === (r.s >= 4)).map((r, i) => `
-      <article class="rv-card"><span class="rv-av" style="--h:${i * 47}">${r.img ? `<img src="${esc(r.img)}" alt="${esc(r.n)}">` : r.e}</span>
+    q("#rvGrid").innerHTML = REVIEWS.filter((r) => rvF === "all" || (rvF === "pos") === (r.s >= 4)).map((r) => {
+      const i = REVIEWS.indexOf(r), img = reviewAvatars[i] || r.img;
+      return `
+      <article class="rv-card"><span class="rv-av" style="--h:${i * 47}"><img src="${esc(img)}" alt="${esc(r.n)}"></span>
         <p>“${esc(r.t[uiLang] ?? r.t.en)}”</p>
-        <footer><b>${esc(r.n)}</b><small>${esc(r.h)} · ♥ ${r.l}</small></footer></article>`).join("");
+        <footer><b>${esc(r.n)}</b><small>${esc(r.h)}</small><button type="button" class="rv-like${myReviewLikes.has(i) ? " liked" : ""}" data-review-like="${i}" aria-pressed="${myReviewLikes.has(i)}" aria-label="${t("rv.like")}">♥ <span>${reviewLikeCounts.get(i) ?? 0}</span></button></footer></article>`;
+    }).join("");
   }
   q("#rvFilter").addEventListener("click", (e) => { if (e.target.dataset.f) { rvF = e.target.dataset.f; renderReviews(); } });
+  q("#rvGrid").addEventListener("click", (e) => {
+    const button = e.target.closest("[data-review-like]"); if (!button) return;
+    if (!googleProfile.uid) return toast(t("rv.signIn"));
+    button.disabled = true;
+    window.dispatchEvent(new CustomEvent("mailmate:toggle-review-like", { detail: { index: Number(button.dataset.reviewLike) } }));
+  });
+  window.addEventListener("mailmate:review-likes", (event) => {
+    const { index, count, liked } = event.detail || {};
+    if (!Number.isInteger(index)) return;
+    reviewLikeCounts.set(index, count || 0);
+    if (liked) myReviewLikes.add(index); else myReviewLikes.delete(index);
+    const button = q(`#rvGrid [data-review-like="${index}"]`);
+    if (button) { button.disabled = false; button.setAttribute("aria-pressed", String(Boolean(liked))); button.classList.toggle("liked", Boolean(liked)); button.querySelector("span").textContent = String(count || 0); }
+  });
+  window.addEventListener("mailmate:review-like-error", () => { qa("#rvGrid [data-review-like]").forEach((button) => { button.disabled = false; }); toast(t("rv.likeError"), "error"); });
 
   // ---------- Feedback form: local demo storage ----------
   const FEEDBACK_KEY = "mailmate_public_feedback_v1";
@@ -1294,7 +1473,19 @@ async function translateLines(text, to) { // MyMemory giới hạn ~500 ký tự
     const items = readFeedback(); q("#feedbackCount").textContent = String(items.length);
     const list = q("#feedbackList");
     if (!items.length) { list.innerHTML = `<p class="note">${esc(t("fb.empty"))}</p>`; return; }
-    list.innerHTML = items.slice().reverse().map((it) => { const nm = it.name || t("fb.anonymous"); return `<article class="feedback-entry"><div class="feedback-entry-head"><span class="fb-av">${it.photo ? `<img src="${esc(it.photo)}" alt="">` : esc(nm.trim().charAt(0).toUpperCase())}</span><div><strong>${esc(nm)}</strong></div></div><p>${esc(it.message)}</p><small>${esc(it.typeLabel)} · ${esc(it.dateLabel)}</small></article>`; }).join("");
+    const ordered = items.slice().reverse();
+    list.innerHTML = ordered.map((it) => {
+      const nm = it.name || t("fb.anonymous"), date = it.createdAt ? new Date(it.createdAt).toLocaleDateString(({ vi: "vi-VN", en: "en-US", ja: "ja-JP" })[uiLang]) : (uiLang === "ja" ? "" : it.dateLabel);
+      const message = uiLang === "ja" ? (it.lang === "ja" ? it.message : (it.translationJa || "フィードバックを翻訳中…")) : it.message;
+      return `<article class="feedback-entry" data-feedback-id="${esc(it.id)}"><div class="feedback-entry-head"><span class="fb-av">${it.photo ? `<img src="${esc(it.photo)}" alt="">` : esc(nm.trim().charAt(0).toUpperCase())}</span><div><strong>${esc(nm)}</strong></div></div><p data-feedback-message>${esc(message)}</p><small>${esc(t(`fb.${it.type}`))}${date ? ` · ${esc(date)}` : ""}</small></article>`;
+    }).join("");
+    if (uiLang === "ja") ordered.filter((it) => it.lang !== "ja" && !it.translationJa).forEach(async (it) => {
+      const source = it.lang || (/[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i.test(it.message) ? "vi" : "en");
+      const translated = await translateToJapanese(it.message, source);
+      it.translationJa = translated === it.message ? "翻訳を表示できません。" : translated;
+      try { localStorage.setItem(FEEDBACK_KEY, JSON.stringify(items)); } catch {}
+      if (uiLang === "ja") { const p = [...list.querySelectorAll("[data-feedback-message]")].find((el) => el.closest("[data-feedback-id]").dataset.feedbackId === String(it.id)); if (p) p.textContent = it.translationJa; }
+    });
   }
   let fbPhoto = "";
   q("#feedbackPhoto").addEventListener("change", (e) => {
@@ -1314,7 +1505,7 @@ async function translateLines(text, to) { // MyMemory giới hạn ~500 ký tự
     const type = q("#feedbackType").value;
     const typeLabels = { suggestion: t("fb.suggestion"), bug: t("fb.bug"), experience: t("fb.experience") };
     const now = new Date();
-    const item = { id: Date.now(), name: q("#feedbackName").value.trim(), photo: fbPhoto, type, typeLabel: typeLabels[type] || type, message, dateLabel: now.toLocaleDateString(uiLang === "ja" ? "ja-JP" : uiLang === "en" ? "en-US" : "vi-VN") };
+    const item = { id: Date.now(), createdAt: now.getTime(), lang: uiLang, name: q("#feedbackName").value.trim(), photo: fbPhoto, type, typeLabel: typeLabels[type] || type, message, dateLabel: now.toLocaleDateString(uiLang === "ja" ? "ja-JP" : uiLang === "en" ? "en-US" : "vi-VN") };
     try { const items = readFeedback(); items.push(item); localStorage.setItem(FEEDBACK_KEY, JSON.stringify(items.slice(-50))); } catch { q("#feedbackStatus").textContent = t("fb.storageError"); return; }
     q("#feedbackMessage").value = ""; fbPhoto = ""; q("#feedbackPhoto").value = ""; q("#fbPhotoPrev").hidden = true; q("#feedbackStatus").textContent = t("fb.success"); renderFeedback();
   });
@@ -1322,15 +1513,15 @@ async function translateLines(text, to) { // MyMemory giới hạn ~500 ký tự
   // ---------- Nhắc đính kèm trước khi mở Gmail + rung nhẹ khi bấm ----------
   Object.assign(UI, {
     "auth.signedOut": ["Chưa đăng nhập", "Signed out", "未ログイン"], "auth.signIn": ["Đăng nhập Google", "Continue with Google", "Googleでログイン"], "auth.signOut": ["Đăng xuất", "Sign out", "ログアウト"], "auth.syncing": ["Đang đồng bộ nháp…", "Syncing drafts…", "下書きを同期中…"], "auth.synced": ["Đã đồng bộ nháp", "Drafts synced", "下書きを同期しました"], "auth.syncError": ["Đăng nhập được nhưng chưa đồng bộ dữ liệu. Kiểm tra Firestore Rules.", "Signed in, but data did not sync. Check Firestore Rules.", "ログインしましたが同期できません。Firestoreルールを確認してください。"], "auth.signInError": ["Không đăng nhập được. Hãy kiểm tra Google provider và miền được phép.", "Sign-in failed. Check the Google provider and authorized domains.", "ログインできません。Googleプロバイダと承認済みドメインを確認してください。"],
-    "footer.product": ["MailMate", "MailMate", "MailMate"], "footer.features": ["Tính năng", "Features", "機能"], "footer.compose": ["Soạn email", "Compose email", "メールを作成"], "footer.community": ["Diễn đàn mẫu", "Email examples", "メール例"], "footer.support": ["Điều khoản và chính sách", "Terms and policies", "利用規約とポリシー"], "footer.terms": ["Điều khoản sử dụng", "Terms of Use", "利用規約"], "footer.privacy": ["Chính sách quyền riêng tư", "Privacy Policy", "プライバシーポリシー"], "footer.usage": ["Chính sách sử dụng", "Acceptable Use Policy", "利用ポリシー"], "footer.other": ["Chính sách khác", "Other Policies", "その他のポリシー"], "footer.reviews": ["Đánh giá", "Reviews", "レビュー"], "footer.note": ["Được tạo để giúp mỗi email trở nên rõ ràng hơn.", "Built to make every email clearer.", "メールをもっと明確にするために。"],
-    "fb.eyebrow": ["MAILMATE / GÓP Ý", "MAILMATE / FEEDBACK", "MAILMATE / フィードバック"],
-    "fb.title": ["Cùng MailMate tốt hơn mỗi ngày.", "Help MailMate get better every day.", "MailMate をもっと良くするために"],
+    "footer.product": ["KhaBi.Mail", "KhaBi.Mail", "KhaBi.Mail"], "footer.features": ["Tính năng", "Features", "機能"], "footer.compose": ["Soạn email", "Compose email", "メールを作成"], "footer.community": ["Diễn đàn mẫu", "Email examples", "メール例"], "footer.support": ["Điều khoản và chính sách", "Terms and policies", "利用規約とポリシー"], "footer.terms": ["Điều khoản sử dụng", "Terms of Use", "利用規約"], "footer.privacy": ["Chính sách quyền riêng tư", "Privacy Policy", "プライバシーポリシー"], "footer.usage": ["Chính sách sử dụng", "Acceptable Use Policy", "利用ポリシー"], "footer.other": ["Chính sách khác", "Other Policies", "その他のポリシー"], "footer.reviews": ["Đánh giá", "Reviews", "レビュー"], "footer.note": ["Được tạo để giúp mỗi email trở nên rõ ràng hơn.", "Built to make every email clearer.", "メールをもっと明確にするために。"],
+    "fb.eyebrow": ["KHABI.MAIL / GÓP Ý", "KHABI.MAIL / FEEDBACK", "KHABI.MAIL / フィードバック"],
+    "fb.title": ["Cùng KhaBi.Mail tốt hơn mỗi ngày.", "Help KhaBi.Mail get better every day.", "KhaBi.Mail をもっと良くするために"],
     "fb.copy": ["Hãy chia sẻ cảm nhận, báo lỗi hoặc đề xuất tính năng mới.", "Share your experience, report a bug, or suggest a feature.", "感想、バグ報告、新機能の提案をお寄せください。"],
     "fb.rating": ["Bạn đánh giá trải nghiệm thế nào?", "How would you rate your experience?", "体験を評価してください"],
     "fb.type": ["Loại phản hồi", "Feedback type", "フィードバックの種類"],
     "fb.suggestion": ["Đề xuất", "Suggestion", "提案"], "fb.bug": ["Báo lỗi", "Bug report", "バグ報告"], "fb.experience": ["Trải nghiệm chung", "General experience", "全体的な感想"],
     "fb.name": ["Tên hiển thị (không bắt buộc)", "Display name (optional)", "表示名（任意）"], "fb.namePh": ["Tên của bạn", "Your name", "お名前"],
-    "fb.message": ["Nội dung góp ý", "Your feedback", "フィードバック内容"], "fb.messagePh": ["Bạn muốn MailMate cải thiện điều gì?", "What should MailMate improve?", "MailMate に改善してほしい点は？"],
+    "fb.message": ["Nội dung góp ý", "Your feedback", "フィードバック内容"], "fb.messagePh": ["Bạn muốn KhaBi.Mail cải thiện điều gì?", "What should KhaBi.Mail improve?", "KhaBi.Mail に改善してほしい点は？"],
     "fb.localNote": ["Bản hiện tại chỉ lưu phản hồi trên trình duyệt này. Để chia sẻ giữa tất cả người dùng, cần kết nối cơ sở dữ liệu trực tuyến.", "This version stores feedback only in this browser. A shared online database is needed for feedback visible to all users.", "現在のバージョンではこのブラウザー内にのみ保存されます。全ユーザーで共有するにはオンラインデータベースが必要です。"],
     "fb.submit": ["Gửi phản hồi ↗", "Send feedback ↗", "フィードバックを送信 ↗"], "fb.recent": ["Phản hồi trên thiết bị này", "Feedback on this device", "この端末のフィードバック"],
     "fb.empty": ["Chưa có phản hồi nào. Bạn có thể là người đầu tiên!", "No feedback yet. Be the first!", "まだフィードバックはありません。最初の投稿者になりましょう！"], "fb.anonymous": ["Người dùng", "User", "ユーザー"],
@@ -1350,8 +1541,9 @@ async function translateLines(text, to) { // MyMemory giới hạn ~500 ký tự
     "fb.halfHint": ["Bấm nửa trái của ngôi sao để chọn nửa điểm (ví dụ 3.5).", "Click the left half of a star to give half a point (e.g. 3.5).", "星の左半分をクリックすると0.5点になります（例：3.5）。"],
   });
   Object.entries(QT).forEach(([k, v]) => { // giọng điệu mới cho chế độ soạn theo mẫu
-    if (TONES[k]) return; TONES[k] = {};
-    ["vi", "en"].forEach((l) => { TONES[k][l] = { hi: `${v[l][0]}{{recipient}},`, bye: `${v[l][1]}\n{{sender}}` }; });
+    TONES[k] ??= {};
+    ["vi", "en"].forEach((l) => { TONES[k][l] ??= { hi: `${v[l][0]}{{recipient}},`, bye: `${v[l][1]}\n{{sender}}` }; });
+    TONES[k].ja = { hi: "{{recipient}} 様", bye: `${v.ja[1]}\n{{sender}}` };
   });
   const QI = () => ({ vi: 0, en: 1, ja: 2 }[uiLang]);
   function renderQuickOptions() {
@@ -1361,7 +1553,27 @@ async function translateLines(text, to) { // MyMemory giới hạn ~500 ký tự
     const tones = QTONES.map((x) => [x[0], x[1][QI()]]);
     ["#qTone", "#tone", "#formSettings [name=tone]"].forEach((s) => fill(q(s), tones));
   }
-  const VLIST = [["Chào bạn, mình là MailMate ✨", "Hi, I'm MailMate ✨", "こんにちは、MailMateです ✨"], ["Mình là người trợ lý thân thiết của bạn.", "I'm your friendly writing assistant.", "あなたの頼れるメール作成アシスタントです。"], ["Hôm nay mình có thể giúp gì cho bạn đây?", "How can I help you today?", "今日は何をお手伝いしましょうか？"], ["Bắt đầu soạn thư", "Start writing", "作成を始める"], ["Hôm nay mình có thể giúp gì cho bạn? Điền thông tin bên dưới hoặc tham khảo diễn đàn, mình sẽ soạn email hoàn chỉnh để bạn gửi.", "How can I help today? Fill in the details below or browse the community, and I'll write a complete email for you.", "下の情報を入力するか広場を参考にすれば、完成したメールを作成します。"], ["Thông tin & Cấu hình", "Details & Settings", "情報と設定"], ["Chủ đề email", "Email topic", "メールのトピック"], ["Tên Giảng viên/Người nhận", "Recipient / Lecturer name", "受取人・講師の名前"], ["Họ và tên của bạn", "Your full name", "あなたの氏名"], ["Email người nhận", "Recipient email", "受取人のメール"], ["Mã số sinh viên", "Student ID", "学籍番号"], ["Lớp / Ngành", "Class / Major", "クラス・専攻"], ["Trình duyệt sẽ tự động nhớ thông tin của bạn cho lần sau.", "Your browser will remember your details for next time.", "次回のためにブラウザが情報を記憶します。"], ["Lý do chi tiết", "Detailed reason", "詳しい理由"], ["Ngôn ngữ đích", "Target language", "出力言語"], ["✨ AI Soạn Email Ngay", "✨ Write Email with AI", "✨ AIでメールを作成"], ["Email của bạn sẽ hiện ở đây. Bạn có thể sửa trực tiếp.", "Your email will appear here. You can edit it directly.", "ここにメールが表示されます。直接編集できます。"], ["Đến (email)", "To (email)", "宛先（メール）"], ["Tiêu đề", "Subject", "件名"], ["Nội dung", "Body", "本文"], ["📋 Sao chép", "📋 Copy", "📋 コピー"], ["💾 Lưu nháp", "💾 Save draft", "💾 下書き保存"], ["🚀 Gửi qua Gmail ➜", "🚀 Send via Gmail ➜", "🚀 Gmailで送信 ➜"], ["Nháp chưa gửi", "Unsent drafts", "未送信の下書き"], ["Chưa có nháp nào.", "No drafts yet.", "下書きはまだありません。"], ["Đã gửi (Xóa)", "Sent (Delete)", "送信済み（削除）"], ["(Không có tiêu đề)", "(No subject)", "（件名なし）"], ["VD: Cô Lê Hằng", "e.g. Prof. Smith", "例：山田先生"], ["VD: Nguyễn Văn A", "e.g. John Smith", "例：山田太郎"], ["VD: 21110123", "e.g. 21110123", "例：21110123"], ["VD: 12C3 / CNTT", "e.g. 12C3 / IT", "例：12C3 / 情報工学"], ["VD: Em bị sốt cấp tính từ đêm qua, không thể đi học được...", "e.g. I've had a high fever since last night and can't attend class...", "例：昨夜から高熱があり、授業に出られません…"], ["Vui lòng nhập tên người nhận.", "Please enter the recipient's name.", "受取人の名前を入力してください。"], ["Tên không được chứa số/ký tự đặc biệt.", "Name can't contain digits or special characters.", "名前に数字や特殊文字は使えません。"], ["Vui lòng nhập họ và tên của bạn.", "Please enter your full name.", "氏名を入力してください。"], ["Họ tên không được chứa số/ký tự đặc biệt.", "Your name can't contain digits or special characters.", "氏名に数字や特殊文字は使えません。"], ["Vui lòng nhập email.", "Please enter an email.", "メールアドレスを入力してください。"], ["Email phải có ký tự '@'.", "Email must contain '@'.", "メールには「@」が必要です。"], ["Vui lòng nhập Lớp/Ngành học.", "Please enter your class / major.", "クラス・専攻を入力してください。"], ["Vui lòng nhập MSSV.", "Please enter your student ID.", "学籍番号を入力してください。"], ["MSSV bị lỗi (Chỉ được chứa số, không chứa chữ cái).", "Invalid ID (digits only, no letters).", "学籍番号が不正です（数字のみ）。"], ["Vui lòng nhập lý do chi tiết.", "Please enter a detailed reason.", "詳しい理由を入力してください。"], ["⏳ AI đang dịch và tạo thư...", "⏳ AI is translating and writing...", "⏳ AIが翻訳・作成中…"], ["✅ Đã tạo thư thành công!", "✅ Email created!", "✅ メールを作成しました！"], ["✅ Đã sao chép vào khay nhớ tạm.", "✅ Copied to clipboard.", "✅ クリップボードにコピーしました。"], ["Lỗi sao chép!", "Copy failed!", "コピーに失敗しました！"], ["⚠️ Thư đang trống!", "⚠️ The email is empty!", "⚠️ メールが空です！"], ["✅ Đã lưu nháp!", "✅ Draft saved!", "✅ 下書きを保存しました！"]];
+  const VLIST = [["Chào bạn, mình là KhaBi.Mail ✨", "Hi, I'm KhaBi.Mail ✨", "こんにちは、KhaBi.Mailです ✨"], ["Mình là người trợ lý thân thiết của bạn.", "I'm your friendly writing assistant.", "あなたの頼れるメール作成アシスタントです。"], ["Hôm nay mình có thể giúp gì cho bạn đây?", "How can I help you today?", "今日は何をお手伝いしましょうか？"], ["Bắt đầu soạn thư", "Start writing", "作成を始める"], ["Hôm nay mình có thể giúp gì cho bạn? Điền thông tin bên dưới hoặc tham khảo diễn đàn, mình sẽ soạn email hoàn chỉnh để bạn gửi.", "How can I help today? Fill in the details below or browse the community, and I'll write a complete email for you.", "下の情報を入力するか広場を参考にすれば、完成したメールを作成します。"], ["Thông tin & Cấu hình", "Details & Settings", "情報と設定"], ["Chủ đề email", "Email topic", "メールのトピック"], ["Tên Giảng viên/Người nhận", "Recipient / Lecturer name", "受取人・講師の名前"], ["Họ và tên của bạn", "Your full name", "あなたの氏名"], ["Email người nhận", "Recipient email", "受取人のメール"], ["Mã số sinh viên", "Student ID", "学籍番号"], ["Lớp / Ngành", "Class / Major", "クラス・専攻"], ["Trình duyệt sẽ tự động nhớ thông tin của bạn cho lần sau.", "Your browser will remember your details for next time.", "次回のためにブラウザが情報を記憶します。"], ["Lý do chi tiết", "Detailed reason", "詳しい理由"], ["Ngôn ngữ đích", "Target language", "出力言語"], ["✨ AI Soạn Email Ngay", "✨ Write Email with AI", "✨ AIでメールを作成"], ["Email của bạn sẽ hiện ở đây. Bạn có thể sửa trực tiếp.", "Your email will appear here. You can edit it directly.", "ここにメールが表示されます。直接編集できます。"], ["Đến (email)", "To (email)", "宛先（メール）"], ["Tiêu đề", "Subject", "件名"], ["Nội dung", "Body", "本文"], ["📋 Sao chép", "📋 Copy", "📋 コピー"], ["💾 Lưu nháp", "💾 Save draft", "💾 下書き保存"], ["✉️ Gửi qua email", "✉️ Send email", "✉️ メールを送信"], ["Nháp chưa gửi", "Unsent drafts", "未送信の下書き"], ["Chưa có nháp nào.", "No drafts yet.", "下書きはまだありません。"], ["Đã gửi (Xóa)", "Sent (Delete)", "送信済み（削除）"], ["(Không có tiêu đề)", "(No subject)", "（件名なし）"], ["VD: Cô Lê Hằng", "e.g. Prof. Smith", "例：山田先生"], ["VD: Nguyễn Văn A", "e.g. John Smith", "例：山田太郎"], ["VD: 21110123", "e.g. 21110123", "例：21110123"], ["VD: 12C3 / CNTT", "e.g. 12C3 / IT", "例：12C3 / 情報工学"], ["VD: Em bị sốt cấp tính từ đêm qua, không thể đi học được...", "e.g. I've had a high fever since last night and can't attend class...", "例：昨夜から高熱があり、授業に出られません…"], ["Vui lòng nhập tên người nhận.", "Please enter the recipient's name.", "受取人の名前を入力してください。"], ["Tên không được chứa số/ký tự đặc biệt.", "Name can't contain digits or special characters.", "名前に数字や特殊文字は使えません。"], ["Vui lòng nhập họ và tên của bạn.", "Please enter your full name.", "氏名を入力してください。"], ["Họ tên không được chứa số/ký tự đặc biệt.", "Your name can't contain digits or special characters.", "氏名に数字や特殊文字は使えません。"], ["Vui lòng nhập email.", "Please enter an email.", "メールアドレスを入力してください。"], ["Email phải có ký tự '@'.", "Email must contain '@'.", "メールには「@」が必要です。"], ["Vui lòng nhập Lớp/Ngành học.", "Please enter your class / major.", "クラス・専攻を入力してください。"], ["Vui lòng nhập MSSV.", "Please enter your student ID.", "学籍番号を入力してください。"], ["MSSV bị lỗi (Chỉ được chứa số, không chứa chữ cái).", "Invalid ID (digits only, no letters).", "学籍番号が不正です（数字のみ）。"], ["Vui lòng nhập lý do chi tiết.", "Please enter a detailed reason.", "詳しい理由を入力してください。"], ["⏳ AI đang dịch và tạo thư...", "⏳ AI is translating and writing...", "⏳ AIが翻訳・作成中…"], ["✅ Đã tạo thư thành công!", "✅ Email created!", "✅ メールを作成しました！"], ["✅ Đã sao chép vào khay nhớ tạm.", "✅ Copied to clipboard.", "✅ クリップボードにコピーしました。"], ["Lỗi sao chép!", "Copy failed!", "コピーに失敗しました！"], ["⚠️ Thư đang trống!", "⚠️ The email is empty!", "⚠️ メールが空です！"], ["✅ Đã lưu nháp!", "✅ Draft saved!", "✅ 下書きを保存しました！"]];
+  VLIST.push(
+    ["Thông tin & Cấu hình", "Information & settings", "情報と設定"], ["Chủ đề email", "Email topic", "メールのトピック"],
+    ["Tên Giảng viên/Người nhận", "Recipient / lecturer name", "教員・宛先の名前"], ["Họ và tên của bạn", "Your full name", "あなたの氏名"],
+    ["Email người nhận", "Recipient email", "宛先メールアドレス"], ["Mã số sinh viên", "Student ID", "学生番号"], ["Lớp / Ngành", "Class / major", "クラス・専攻"],
+    ["Trình duyệt sẽ tự động nhớ thông tin của bạn cho lần sau.", "Your browser will remember your details for next time.", "入力内容はブラウザーに保存され、次回も利用できます。"],
+    ["Lý do chi tiết", "Detailed reason", "詳しい理由"], ["Ngôn ngữ đích", "Output language", "出力言語"],
+    ["Email của bạn sẽ hiện ở đây. Bạn có thể sửa trực tiếp.", "Your email will appear here. You can edit it directly.", "ここにメールが表示されます。直接編集できます。"],
+    ["Đến (email)", "To (email)", "宛先（メールアドレス）"], ["Nháp chưa gửi", "Unsent drafts", "未送信の下書き"],
+    ["Chưa có nháp nào.", "No drafts yet.", "下書きはまだありません。"], ["(Không có tiêu đề)", "(No subject)", "（件名なし）"], ["Đã gửi (Xóa)", "Sent (Delete)", "送信済み（削除）"],
+    ["Chào bạn, mình là KhaBi.Mail ✨", "Hi, I'm KhaBi.Mail ✨", "こんにちは、KhaBi.Mailです ✨"], ["Mình là người trợ lý thân thiết của bạn.", "I'm your friendly writing assistant.", "あなたのメール作成をお手伝いします。"],
+    ["Hôm nay mình có thể giúp gì cho bạn đây?", "How can I help you today?", "今日は何をお手伝いしましょうか？"], ["Bắt đầu soạn thư", "Start writing", "作成を始める"],
+    ["Try on web ↘", "Try on web ↘", "Web で試す ↘"], ["MON", "MON", "月"], ["● Nhắc theo dõi", "● Follow-up reminder", "● フォローアップ通知"],
+    ["Góp ý email", "Email feedback", "メールへのフィードバック"], ["Nhập mã PIN", "Enter PIN", "PIN を入力"],
+    ["Tiếng Việt", "Vietnamese", "ベトナム語"], ["Tiếng Anh", "English", "英語"], ["Song ngữ (VI + EN)", "Bilingual (VI + EN)", "二言語（ベトナム語＋英語）"],
+    ["24 giờ", "24-hour", "24時間"], ["12 giờ (AM/PM)", "12-hour (AM/PM)", "12時間（AM/PM）"], ["Ví dụ: TP. Hồ Chí Minh", "e.g. Ho Chi Minh City", "例：ホーチミン市"],
+    ["YOUR NEXT EMAIL", "YOUR NEXT EMAIL", "次のメール"], ["Clear. Thoughtful. Professional.", "Clear. Thoughtful. Professional.", "明確に。丁寧に。プロらしく。"], ["One message at a time.", "One message at a time.", "一通ずつ、心を込めて。"],
+    ["KHABI.MAIL / PREFERENCES", "KHABI.MAIL / PREFERENCES", "KHABI.MAIL / 設定"],
+    ["01 / WRITE", "01 / WRITE", "01 / 作成"], ["02 / REMEMBER", "02 / REMEMBER", "02 / リマインダー"], ["03 / SHARE", "03 / SHARE", "03 / 共有"],
+    ["Chime", "Chime", "チャイム"], ["Marimba", "Marimba", "マリンバ"], ["Digital pulse", "Digital pulse", "デジタルパルス"], ["Alarm", "Alarm", "アラーム"], ["Bubble", "Bubble", "バブル"], ["Harp", "Harp", "ハープ"], ["Sonar", "Sonar", "ソナー"], ["Arcade", "Arcade", "アーケード"], ["Doorbell", "Doorbell", "ドアベル"], ["Zen bell", "Zen bell", "禅の鐘"], ["Xylophone", "Xylophone", "木琴"], ["iPhone", "iPhone", "iPhone"], ["Ringtone 2", "Ringtone 2", "着信音 2"], ["⬆ MP3", "⬆ MP3", "⬆ MP3"]
+  );
   const norm = (s) => s.replace(/\s+/g, " ").trim();
   const VM = new Map(); VLIST.forEach((e) => e.forEach((x) => VM.set(norm(x), e)));
   const VT = (s) => { const e = VM.get(norm(s)); return e ? e[QI()] : s; };

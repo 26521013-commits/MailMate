@@ -6,14 +6,14 @@
       name="viewport"
       content="width=device-width, initial-scale=1, viewport-fit=cover"
     />
-    <title>MailMate – Soạn email hoàn chỉnh</title>
+    <title>KhaBi.Mail – Soạn email hoàn chỉnh</title>
     <link rel="icon" href="favicon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="favicon.svg" />
     <link
       rel="stylesheet"
       href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;700&family=Newsreader:wght@400;600&display=swap"
     />
-    <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="style.css?v=feedback-sticky-20261007s" />
   </head>
   <body>
     <div id="deco" aria-hidden="true"></div>
@@ -24,7 +24,7 @@
         <div class="bot" aria-hidden="true">
           <i></i><i></i><u></u><u></u><b></b>
         </div>
-        <h2>Chào bạn, mình là MailMate ✨</h2>
+        <h2>Chào bạn, mình là KhaBi.Mail ✨</h2>
         <p>
           Mình là người trợ lý thân thiết của bạn.<br />Hôm nay mình có thể giúp
           gì cho bạn đây?
@@ -36,26 +36,36 @@
     </div>
 
     <header class="topbar">
-      <a class="brand" href="#"><span class="brand-mark">✉</span><span id="siteName">MailMate</span></a>
+      <a class="brand" href="#"><span class="brand-mark">✉</span><span id="siteName">KhaBi.Mail</span></a>
       <nav class="tabs nav" role="tablist" aria-label="Chuyển mục"><span class="nav-thumb"></span>
-        <button class="tab" role="tab" data-v="compose" aria-selected="true" data-i18n="nav.compose">✉️ Soạn email</button>
-        <button class="tab" role="tab" data-v="drafts" aria-selected="false"><span data-i18n="nav.drafts">⏰ Nháp &amp; nhắc nhở</span> <span class="badge" id="draftBadge" hidden>0</span></button>
-        <button class="tab" role="tab" data-v="forum" aria-selected="false" data-i18n="nav.community">💌 Diễn đàn mẫu</button>
-        <button class="tab" role="tab" data-v="admin" aria-selected="false" data-i18n="nav.admin" hidden>🔐 Quản trị</button>
-        <div class="dev-menu"><button class="tab dev-trigger" type="button" aria-haspopup="true" data-i18n="nav.developers">👥 Các nhà phát triển</button><div class="dev-popover" role="menu"><strong data-i18n="dev.title">Đội ngũ MailMate</strong><span>Cao Nguyên Thái</span><span>Giang Trung Kiên</span><span>Nguyễn Thiên Minh</span><span>Đỗ Xuân Bình</span><span>Nguyễn Khả Hân</span><span>Trần Nguyên Phú</span><span>Nguyễn Vũ Minh Khang</span></div></div>
-        <button class="tab upgrade-trigger" type="button" id="openUpgrade" data-i18n="nav.upgrade">💎 Nâng cấp</button>
+        <button class="tab" role="tab" data-v="compose" aria-selected="true" aria-label="Soạn email"><span class="nav-icon" aria-hidden="true">✉</span><span class="nav-label" data-i18n="nav.compose">Soạn email</span></button>
+        <button class="tab" role="tab" data-v="drafts" aria-selected="false" aria-label="Nháp và nhắc nhở"><span class="nav-icon" aria-hidden="true">◷</span><span class="nav-label" data-i18n="nav.drafts">Nháp &amp; nhắc nhở</span><span class="badge" id="draftBadge" hidden>0</span></button>
+        <button class="tab" role="tab" data-v="forum" aria-selected="false" aria-label="Diễn đàn mẫu"><span class="nav-icon" aria-hidden="true">▤</span><span class="nav-label" data-i18n="nav.community">Diễn đàn mẫu</span></button>
+        <button class="tab" role="tab" data-v="admin" aria-selected="false" aria-label="Quản trị" hidden><span class="nav-icon" aria-hidden="true">▣</span><span class="nav-label" data-i18n="nav.admin">Quản trị</span></button>
+        <div class="dev-menu"><button class="tab dev-trigger" type="button" aria-haspopup="true" aria-label="Các nhà phát triển" title="Các nhà phát triển"><span class="nav-icon" aria-hidden="true">♧</span><span class="nav-label" data-i18n="nav.developers">Các nhà phát triển</span></button><div class="dev-popover" role="menu"><strong data-i18n="dev.title">Đội ngũ KhaBi.Mail</strong><span>Cao Nguyên Thái</span><span>Giang Trung Kiên</span><span>Nguyễn Thiên Minh</span><span>Đỗ Xuân Bình</span><span>Nguyễn Khả Hân</span><span>Trần Nguyên Phú</span><span>Nguyễn Vũ Minh Khang</span></div></div>
+        <button class="tab upgrade-trigger" type="button" id="openUpgrade" aria-label="Nâng cấp" title="Nâng cấp"><span class="nav-icon" aria-hidden="true">◇</span><span class="nav-label" data-i18n="nav.upgrade">Nâng cấp</span></button>
+        <button type="button" class="tab settings-nav-trigger" id="openSettings" aria-label="Cài đặt" title="Cài đặt"><span class="nav-icon" aria-hidden="true">⚙</span><span class="nav-label" data-i18n="settings.title">Cài đặt</span></button>
       </nav>
-      <div class="account-control" aria-live="polite"><span id="accountLabel" class="account-label" data-i18n="auth.signedOut">Chưa đăng nhập</span><button type="button" class="google-sign-in" id="googleSignIn"><span aria-hidden="true">G</span><span data-i18n="auth.signIn">Đăng nhập Google</span></button><button type="button" class="google-sign-out" id="googleSignOut" hidden data-i18n="auth.signOut">Đăng xuất</button><small id="cloudStatus" class="cloud-status"></small></div>
+      <div class="account-control" aria-live="polite"><span id="accountLabel" class="account-label" data-i18n="auth.signedOut">Chưa đăng nhập</span><button type="button" class="google-sign-in" id="googleSignIn"><span aria-hidden="true">G</span><span data-i18n="auth.signIn">Đăng nhập Google</span></button></div>
     </header>
     <main>
       <section class="landing" id="landing">
         <div class="landing-orb orb-one"></div><div class="landing-orb orb-two"></div>
         <div class="landing-content"><div class="landing-mark">✉</div><p class="eyebrow" data-i18n="hero.eyebrow">TRỢ LÝ EMAIL CỦA BẠN</p><h1 data-i18n="hero.title">Viết email tốt hơn. Tự tin hơn.</h1><p class="landing-copy" data-i18n="hero.copy">Biến ý tưởng thành những email rõ ràng, chuyên nghiệp chỉ trong vài bước.</p><div class="landing-actions"><button class="hero-primary" id="tryWeb" data-i18n="hero.try">Try on web ↘</button><button class="hero-secondary" id="heroLearn" data-i18n="hero.learn">Khám phá tính năng</button></div><div class="landing-caption"><span class="live-dot"></span><span data-i18n="hero.caption">Không gian viết thư dành cho sinh viên và người đi làm</span></div></div>
-        <div class="hero-preview" aria-hidden="true"><div class="preview-top"><span></span><span></span><span></span><b>MailMate</b></div><div class="preview-label">✦ YOUR NEXT EMAIL</div><div class="preview-line wide"></div><div class="preview-line"></div><div class="preview-line short"></div><div class="preview-card"><span>✉</span><div><b>Clear. Thoughtful. Professional.</b><small>One message at a time.</small></div><i>✓</i></div><div class="preview-glow"></div></div>
+        <div class="hero-preview" aria-hidden="true"><div class="preview-top"><span></span><span></span><span></span><b>KhaBi.Mail</b></div><div class="preview-label">✦ YOUR NEXT EMAIL</div><div class="preview-line wide"></div><div class="preview-line"></div><div class="preview-line short"></div><div class="preview-card"><span>✉</span><div><b>Clear. Thoughtful. Professional.</b><small>One message at a time.</small></div><i>✓</i></div><div class="preview-glow"></div></div>
       </section>
-      <section class="trusted" aria-label="Trusted teams"><p data-i18n="hero.trusted">Được nhiều đội ngũ hàng đầu tin tưởng</p><div class="trusted-logos"><span class="tl tl-nvidia"><img src="NVDIA logo.png" alt="NVIDIA"></span><span class="tl tl-apple" role="img" aria-label="Apple"><svg viewBox="2.6 0 18.8 24" fill="currentColor" aria-hidden="true"><path d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701"/></svg></span><span class="tl tl-google"><svg class="g-word" viewBox="-4 -4 458 136" role="img" aria-label="Google" fill="none" stroke-width="12" stroke-linejoin="miter"><path d="M83.7 21.7 A44 44 0 1 0 94 50 H52" stroke="#4285F4"/><circle cx="145" cy="63" r="31" stroke="#EA4335"/><circle cx="225" cy="63" r="31" stroke="#FBBC05"/><circle cx="305" cy="63" r="31" stroke="#4285F4"/><path d="M336 63 V96 A26 26 0 0 1 310 122 H299" stroke="#4285F4"/><path d="M358 0 V100" stroke="#34A853"/><path d="M442 63 A31 31 0 1 0 434.7 82.9" stroke="#EA4335"/><path d="M380 63 H442" stroke="#EA4335"/></svg></span><span class="tl tl-meta"><img src="meta-Photoroom.png" alt="Meta"></span><span class="tl tl-openai"><img src="openAI.png" alt="OpenAI"></span><span class="tl tl-spacex"><img src="SpaceX.png" alt="SpaceX"></span></div><small data-i18n="hero.disclaimer"></small></section>
+      <section class="trusted" aria-label="Trusted teams"><p data-i18n="hero.trusted">Được nhiều đội ngũ hàng đầu tin tưởng</p>
+        <div class="trusted-logos">
+          <button type="button" class="tl tl-nvidia" data-image="đv_NVDIA.png" data-team="NVIDIA" aria-label="Xem hình ảnh NVIDIA"><img src="NVDIA logo.png" alt="" aria-hidden="true"></button>
+          <button type="button" class="tl tl-apple" data-image="đv_Apple.png" data-team="Apple" aria-label="Xem hình ảnh Apple"><svg viewBox="2.6 0 18.8 24" fill="currentColor" aria-hidden="true"><path d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701"/></svg></button>
+          <button type="button" class="tl tl-google" data-image="đv_GG.png" data-team="Google" aria-label="Xem hình ảnh Google"><svg class="g-word" viewBox="-4 -4 458 136" aria-hidden="true" fill="none" stroke-width="12" stroke-linejoin="miter"><path d="M83.7 21.7 A44 44 0 1 0 94 50 H52" stroke="#4285F4"/><circle cx="145" cy="63" r="31" stroke="#EA4335"/><circle cx="225" cy="63" r="31" stroke="#FBBC05"/><circle cx="305" cy="63" r="31" stroke="#4285F4"/><path d="M336 63 V96 A26 26 0 0 1 310 122 H299" stroke="#4285F4"/><path d="M358 0 V100" stroke="#34A853"/><path d="M442 63 A31 31 0 1 0 434.7 82.9" stroke="#EA4335"/><path d="M380 63 H442" stroke="#EA4335"/></svg></button>
+          <button type="button" class="tl tl-meta" data-image="đv_Meta.png" data-team="Meta" aria-label="Xem hình ảnh Meta"><img src="meta-Photoroom.png" alt="" aria-hidden="true"></button>
+          <button type="button" class="tl tl-openai" data-image="đv_OpenAI.png" data-team="OpenAI" aria-label="Xem hình ảnh OpenAI"><img src="openAI.png" alt="" aria-hidden="true"></button>
+          <button type="button" class="tl tl-spacex" data-image="đv_spaceX.png" data-team="SpaceX" aria-label="Xem hình ảnh SpaceX"><img src="SpaceX.png" alt="" aria-hidden="true"></button>
+          <button type="button" class="tl tl-uit" data-image="đv_UIT.png" data-team="UIT – 20 năm" aria-label="Xem hình ảnh UIT – 20 năm"><img src="UIT_20_01_f687725dd2.png" alt="" aria-hidden="true"></button>
+        </div><small data-i18n="hero.disclaimer"></small></section>
       <section class="feature-section" id="features">
-        <div class="feature-heading"><p class="eyebrow" data-i18n="features.eyebrow">MỌI THỨ BẠN CẦN ĐỂ VIẾT TỐT HƠN</p><h2 data-i18n="features.title">Một không gian nhỏ, nhiều trợ giúp thiết thực.</h2><p data-i18n="features.copy">Từ email đầu tiên đến việc theo dõi phản hồi, MailMate giúp bạn sắp xếp lời nói và công việc rõ ràng hơn.</p></div>
+        <div class="feature-heading"><p class="eyebrow" data-i18n="features.eyebrow">MỌI THỨ BẠN CẦN ĐỂ VIẾT TỐT HƠN</p><h2 data-i18n="features.title">Một không gian nhỏ, nhiều trợ giúp thiết thực.</h2><p data-i18n="features.copy">Từ email đầu tiên đến việc theo dõi phản hồi, KhaBi.Mail giúp bạn sắp xếp lời nói và công việc rõ ràng hơn.</p></div>
         <div class="feature-grid">
           <article class="feature-card"><div class="feature-art art-compose"><div class="art-window"><span></span><span></span><span></span><b>✉</b><i></i><i></i><i></i></div></div><div class="feature-text"><span>01 / WRITE</span><h3 data-i18n="features.composeTitle">Soạn email theo từng bước</h3><p data-i18n="features.composeCopy">Chọn chủ đề, giọng điệu và điền thông tin để tạo bản nháp có cấu trúc rõ ràng.</p></div></article>
           <article class="feature-card"><div class="feature-art art-drafts"><div class="art-calendar"><b>MON</b><strong>09:41</strong><span>● Nhắc theo dõi</span><i></i></div><div class="art-clock-ring">✦</div></div><div class="feature-text"><span>02 / REMEMBER</span><h3 data-i18n="features.draftsTitle">Nháp và nhắc nhở</h3><p data-i18n="features.draftsCopy">Lưu email chưa gửi, đặt lịch nhắc và theo dõi việc cần làm tiếp theo.</p></div></article>
@@ -66,7 +76,7 @@
     </main>
     <div class="wrap" id="webApp">
       <div class="alert-bar" id="alertBar" hidden></div>
-      <h1>MailMate <span class="tw" aria-hidden="true">✦</span></h1>
+      <h1>KhaBi.Mail <span class="tw" aria-hidden="true">✦</span></h1>
       <p class="sub">
         Hôm nay mình có thể giúp gì cho bạn? Điền thông tin bên dưới hoặc tham
         khảo diễn đàn, mình sẽ soạn email hoàn chỉnh để bạn gửi.
@@ -100,10 +110,6 @@
             <button type="button" data-filter="all" data-i18n="d.fAll"></button>
           </div>
           <section class="live-clock" aria-label="Đồng hồ thời gian thực"><div class="clock-face"><div class="clock-kicker"><span class="clock-dot"></span><span data-i18n="clock.live">LIVE LOCAL TIME</span></div><div class="clock-time" id="liveClock">00:00:00</div><div class="clock-date" id="liveDate">---</div><div class="clock-track"><i></i></div></div><div class="clock-message"><span class="clock-spark">✦</span><h3 data-i18n="clock.title">Một nhịp dừng giữa những email</h3><p data-i18n="clock.copy">Thời gian đang trôi — hãy dành một phút để viết điều bạn muốn nói thật rõ ràng.</p></div></section>
-          <div class="ringbar"><span>🔔</span>
-            <select id="ringSel"><option value="chime">Chime</option><option value="marimba">Marimba</option><option value="pulse">Digital pulse</option><option value="classic">Alarm</option><option value="bubble">Bubble</option><option value="harp">Harp</option><option value="sonar">Sonar</option><option value="arcade">Arcade</option><option value="doorbell">Doorbell</option><option value="zen">Zen bell</option><option value="xylo">Xylophone</option><option value="iphone">iPhone</option><option value="tone2">Ringtone 2</option><option value="custom" hidden>My sound</option></select>
-            <button type="button" class="btn" id="ringTest">▶</button>
-            <label class="btn" for="ringFile">⬆ MP3</label><input type="file" id="ringFile" accept="audio/*" hidden></div>
           <div class="card-list" id="draftList"></div>
         </section>
       </div>
@@ -112,29 +118,22 @@
       <div id="vAdmin" hidden>
         <section class="panel drafts">
           <h2 data-i18n="a.title"></h2>
-          <form class="gate" id="formLogin">
-            <p class="note" data-i18n="a.gate"></p>
-            <label class="field"><span data-i18n="a.pin"></span><input type="password" name="pin" autocomplete="current-password" required></label>
-            <button type="submit" class="btn main" data-i18n="a.login"></button>
-          </form>
           <div id="adminPanel" hidden>
             <div class="subtabs" id="adminTabs">
               <button type="button" data-tab="settings" data-i18n="a.tabSettings"></button>
               <button type="button" data-tab="topics" data-i18n="a.tabTopics"></button>
               <button type="button" data-tab="posts" data-i18n="a.tabPosts"></button>
               <button type="button" data-tab="data" data-i18n="a.tabData"></button>
-              <button type="button" id="btnLogout" data-i18n="a.logout"></button>
             </div>
             <div class="admin-pane" data-pane="settings">
               <form class="form-grid" id="formSettings">
-                <label class="field"><span data-i18n="a.siteName"></span><input name="siteName" maxlength="40" required></label>
                 <label class="field"><span data-i18n="a.autoRemind"></span><input name="autoRemindHours" type="number" min="0" max="720" required></label>
-                <label class="field"><span data-i18n="a.defUi"></span><select name="uiLang"><option value="vi">Tiếng Việt</option><option value="en">English</option></select></label>
-                <label class="field"><span data-i18n="a.defMail"></span><select name="mailLang"><option value="vi">Tiếng Việt</option><option value="en">English</option><option value="both" data-i18n="c.both"></option></select></label>
+                <label class="field"><span data-i18n="a.defUi"></span><select name="uiLang"><option value="vi">Tiếng Việt</option><option value="en">English</option><option value="ja">日本語</option></select></label>
+                <label class="field"><span data-i18n="a.defMail"></span><select name="mailLang"><option value="vi">Tiếng Việt</option><option value="en">English</option><option value="ja">日本語</option><option value="both" data-i18n="c.both"></option></select></label>
                 <label class="field"><span data-i18n="a.defTone"></span><select name="tone"></select></label>
-                <label class="field"><span data-i18n="a.newPin"></span><input name="newPin" type="password" minlength="4" autocomplete="new-password"></label>
                 <label class="check"><input type="checkbox" name="moderation"><span data-i18n="a.moderation"></span></label>
                 <label class="check"><input type="checkbox" name="comments"><span data-i18n="a.allowComments"></span></label>
+                <fieldset class="wide review-photo-settings"><legend data-i18n="a.reviewPhotos">Ảnh đánh giá minh họa</legend><p class="note" data-i18n="a.reviewPhotosHint">Chọn ảnh cho các thẻ đánh giá mẫu.</p><div id="reviewPhotoControls"></div></fieldset>
                 <div class="wide"><button type="submit" class="btn main" data-i18n="g.save"></button></div>
               </form>
             </div>
@@ -259,6 +258,7 @@
               <div class="bar">
                 <button class="btn" id="copy">📋 Sao chép</button>
                 <button class="btn" id="save">💾 Lưu nháp</button>
+                <button class="btn" id="btnQuickShare" type="button" data-i18n="c.share">💌 Chia sẻ lên diễn đàn</button>
                 <a
                   class="btn"
                   id="gm"
@@ -269,7 +269,7 @@
                     border-color: var(--acc);
                     color: var(--onacc);
                   "
-                  >🚀 Gửi qua Gmail ➜</a
+                  >✉️ Gửi qua email</a
                 >
               </div>
 
@@ -286,11 +286,12 @@
               <h2 data-i18n="c.step2"></h2>
               <div class="row">
                 <div><label for="tone" data-i18n="c.tone"></label><select id="tone"></select></div>
-                <div><label for="mailLang" data-i18n="c.mailLang"></label><select id="mailLang"><option value="vi">Tiếng Việt</option><option value="en">English</option><option value="both" data-i18n="c.both"></option></select></div>
+                <div><label for="mailLang" data-i18n="c.mailLang"></label><select id="mailLang"><option value="vi">Tiếng Việt</option><option value="en">English</option><option value="ja">日本語</option><option value="both" data-i18n="c.both"></option></select></div>
               </div>
               <p class="note" id="bilingualHint" data-i18n="c.bilingualHint" hidden></p>
               <h2 style="margin-top:18px" data-i18n="c.step3"></h2>
               <div class="fields" id="fields"></div>
+              <label class="field wide" for="tplRecipientEmail" data-i18n="c.recipientEmail">Email người nhận</label><input id="tplRecipientEmail" type="email" autocomplete="email" data-i18n-ph="c.recipientEmailPh" placeholder="name@example.com">
               <div class="bar"><button type="button" class="btn" id="btnSample" data-i18n="c.sample"></button><button type="button" class="btn" id="btnReset" data-i18n="c.reset"></button></div>
             </div>
             <div class="letter sheet">
@@ -300,7 +301,6 @@
               <div class="bar">
                 <button type="button" class="btn" id="btnCopy" data-i18n="c.copy"></button>
                 <button type="button" class="btn" id="btnMail" data-i18n="c.mailto"></button>
-                <button type="button" class="btn" id="btnGmail">🚀 Gmail</button>
                 <button type="button" class="btn" id="btnSave" data-i18n="c.save"></button>
                 <button type="button" class="btn" id="btnShare" data-i18n="c.share"></button>
               </div>
@@ -308,49 +308,48 @@
           </div>
         </div>
 
-        <section class="panel drafts" aria-label="Nháp">
-          <h2>Nháp chưa gửi</h2>
-          <div id="dl"><div class="note">Chưa có nháp nào.</div></div>
-        </section>
       </div>
     </div>
 
     <section class="reviews wrap" id="reviews">
-      <h2 data-i18n="rv.title">Khách hàng nói gì về MailMate</h2>
+      <h2 data-i18n="rv.title">Khách hàng nói gì về KhaBi.Mail</h2>
+      <p class="note review-disclaimer" data-i18n="rv.disclaimer">Các trích dẫn bên dưới là nội dung minh họa do nhóm biên soạn, không phải xác nhận của những cá nhân được nhắc tên.</p>
       <div class="rv-filter" id="rvFilter"><button data-f="all" class="active" data-i18n="rv.all">Tất cả</button><button data-f="pos" data-i18n="rv.pos">Tích cực</button><button data-f="neg" data-i18n="rv.neg">Cần cải thiện</button></div>
       <div class="rv-grid" id="rvGrid"></div>
       <p class="note" data-i18n="rv.note"></p>
     </section>
 
     <section class="feedback-section wrap" id="feedback">
-      <div class="feedback-intro"><span class="feedback-kicker" data-i18n="fb.eyebrow">MAILMATE / FEEDBACK</span><h2 data-i18n="fb.title">Giúp MailMate tốt hơn mỗi ngày.</h2><p data-i18n="fb.copy">Bạn đã trải nghiệm MailMate? Hãy chia sẻ cảm nhận, báo lỗi hoặc đề xuất tính năng mới.</p></div>
+      <div class="feedback-intro"><span class="feedback-kicker" data-i18n="fb.eyebrow">KHABI.MAIL / FEEDBACK</span><h2 data-i18n="fb.title">Giúp KhaBi.Mail tốt hơn mỗi ngày.</h2><p data-i18n="fb.copy">Bạn đã trải nghiệm KhaBi.Mail? Hãy chia sẻ cảm nhận, báo lỗi hoặc đề xuất tính năng mới.</p></div>
       <form id="feedbackForm" class="feedback-form">
         <label class="feedback-label" for="feedbackType" data-i18n="fb.type">Loại phản hồi</label><select id="feedbackType"><option value="suggestion" data-i18n="fb.suggestion">Đề xuất</option><option value="bug" data-i18n="fb.bug">Báo lỗi</option><option value="experience" data-i18n="fb.experience">Trải nghiệm chung</option></select>
         <label class="feedback-label" for="feedbackName" data-i18n="fb.name">Tên hiển thị (không bắt buộc)</label><input id="feedbackName" maxlength="60" autocomplete="name" data-i18n-ph="fb.namePh" placeholder="Tên của bạn"><label class="feedback-label" for="feedbackPhoto" data-i18n="fb.photo">Ảnh của bạn (không bắt buộc)</label><div class="fb-photo-row"><input type="file" id="feedbackPhoto" accept="image/*"><img id="fbPhotoPrev" class="fb-prev" alt="" hidden></div>
-        <label class="feedback-label" for="feedbackMessage" data-i18n="fb.message">Nội dung góp ý</label><textarea id="feedbackMessage" rows="4" maxlength="1200" required data-i18n-ph="fb.messagePh" placeholder="Bạn muốn MailMate cải thiện điều gì?"></textarea>
+        <label class="feedback-label" for="feedbackMessage" data-i18n="fb.message">Nội dung góp ý</label><textarea id="feedbackMessage" rows="4" maxlength="1200" required data-i18n-ph="fb.messagePh" placeholder="Bạn muốn KhaBi.Mail cải thiện điều gì?"></textarea>
         <div class="feedback-form-foot"><button class="btn main" type="submit" data-i18n="fb.submit">Gửi phản hồi ↗</button></div>
         <p id="feedbackStatus" class="feedback-status" role="status" aria-live="polite"></p>
       </form>
-      <div class="community-feedback"><div class="community-feedback-head"><h3 data-i18n="fb.recent">Phản hồi trên thiết bị này</h3><span id="feedbackCount">0</span></div><div id="feedbackList" class="feedback-list"><p class="note" data-i18n="fb.empty">Chưa có phản hồi nào. Bạn có thể là người đầu tiên!</p></div></div>
     </section>
+    <section class="community-feedback wrap" aria-labelledby="feedbackRecentTitle"><div class="community-feedback-head"><h3 id="feedbackRecentTitle" data-i18n="fb.recent">Phản hồi trên thiết bị này</h3><span id="feedbackCount">0</span></div><div id="feedbackList" class="feedback-list"><p class="note" data-i18n="fb.empty">Chưa có phản hồi nào. Bạn có thể là người đầu tiên!</p></div></section>
 
     <footer class="site-footer">
       <div class="footer-main">
-        <div class="footer-brand-block"><a class="brand" href="#landing"><span class="brand-mark">✉</span><span>MailMate</span></a><p data-i18n="fb.footer">Được tạo để giúp mỗi email trở nên rõ ràng hơn.</p></div>
-        <nav class="footer-column" aria-label="MailMate"><h2 data-i18n="footer.product">MailMate</h2><a href="#features" data-i18n="footer.features">Tính năng</a><a href="#webApp" data-i18n="footer.compose">Soạn email</a><a href="#vForum" data-i18n="footer.community">Diễn đàn mẫu</a></nav>
+        <div class="footer-brand-block"><a class="brand" href="#landing"><span class="brand-mark">✉</span><span>KhaBi.Mail</span></a><p data-i18n="fb.footer">Được tạo để giúp mỗi email trở nên rõ ràng hơn.</p></div>
+        <nav class="footer-column" aria-label="KhaBi.Mail"><h2 data-i18n="footer.product">KhaBi.Mail</h2><a href="#features" data-i18n="footer.features">Tính năng</a><a href="#webApp" data-i18n="footer.compose">Soạn email</a><a href="#vForum" data-i18n="footer.community">Diễn đàn mẫu</a></nav>
         <nav class="footer-column" aria-label="Điều khoản và chính sách"><h2 data-i18n="footer.support">Điều khoản và chính sách</h2><a href="policies.html#terms" data-i18n="footer.terms">Điều khoản sử dụng</a><a href="policies.html#privacy" data-i18n="footer.privacy">Chính sách quyền riêng tư</a><a href="policies.html#acceptable-use" data-i18n="footer.usage">Chính sách sử dụng</a><a href="policies.html#storage" data-i18n="footer.other">Chính sách khác</a><a href="#feedback" data-i18n="fb.footerLink">Gửi góp ý</a></nav>
       </div>
-      <div class="footer-bottom"><span>© 2026 MailMate</span><span data-i18n="footer.note">Được tạo để giúp mỗi email trở nên rõ ràng hơn.</span></div>
+      <div class="footer-bottom"><span>© 2026 KhaBi.Mail</span><span data-i18n="footer.note">Được tạo để giúp mỗi email trở nên rõ ràng hơn.</span></div>
     </footer>
 
     <div class="island" id="island" role="status" aria-live="polite"></div>
+    <dialog class="partner-dialog" id="partnerDialog" aria-labelledby="partnerTitle"><div class="partner-dialog-head"><h2 id="partnerTitle"></h2><button type="button" class="btn" id="closePartnerDialog" aria-label="Đóng ảnh">✕</button></div><img id="partnerImage" alt=""></dialog>
 
     <aside class="floating-clock" aria-label="Thời gian hiện tại"><span class="floating-clock-dot"></span><div><strong id="floatingTime">00:00:00</strong><small id="floatingDate">---</small><small id="floatingLocation">Múi giờ thiết bị</small></div></aside>
-    <button type="button" class="settings-gear" id="openSettings" aria-label="Settings" title="Settings">⚙</button>
-    <dialog class="settings-dialog" id="settingsDialog"><div class="settings-heading"><div><span class="settings-eyebrow">MAILMATE / PREFERENCES</span><h2 data-i18n="settings.title">Cài đặt</h2><p class="note" data-i18n="settings.copy">Tùy chỉnh trải nghiệm của bạn.</p></div><button class="btn" type="button" id="closeSettings" aria-label="Close">✕</button></div>
+    <button type="button" class="settings-gear" id="settingsGear" aria-label="Cài đặt" title="Cài đặt">⚙</button>
+    <dialog class="settings-dialog" id="settingsDialog"><div class="settings-heading"><div><span class="settings-eyebrow">KHABI.MAIL / PREFERENCES</span><h2 data-i18n="settings.title">Cài đặt</h2><p class="note" data-i18n="settings.copy">Tùy chỉnh trải nghiệm của bạn.</p></div><button class="btn" type="button" id="closeSettings" aria-label="Close">✕</button></div>
       <section class="settings-group"><h3 data-i18n="settings.language">Ngôn ngữ giao diện</h3><div class="settings-langs" role="group" aria-label="Language"><button type="button" data-ui-lang="vi">🇻🇳 Tiếng Việt</button><button type="button" data-ui-lang="en">🇬🇧 English</button><button type="button" data-ui-lang="ja">🇯🇵 日本語</button></div></section>
+      <section class="settings-group"><h3 data-i18n="settings.sound">Âm thanh nhắc nhở</h3><label class="settings-field"><span data-i18n="settings.ringtone">Nhạc chuông</span><select id="ringSel"><option value="chime">Chime</option><option value="marimba">Marimba</option><option value="pulse">Digital pulse</option><option value="classic">Alarm</option><option value="bubble">Bubble</option><option value="harp">Harp</option><option value="sonar">Sonar</option><option value="arcade">Arcade</option><option value="doorbell">Doorbell</option><option value="zen">Zen bell</option><option value="xylo">Xylophone</option><option value="iphone">Iphone</option><option value="tone2">YPRG</option><option value="custom" hidden>My sound</option></select></label><label class="settings-field" for="ringVolume"><span><span data-i18n="settings.volume">Âm lượng</span>: <output id="ringVolumeValue">80%</output></span><input type="range" id="ringVolume" min="0" max="100" step="5" value="80"></label><div class="ringbar"><button type="button" class="btn main" id="ringTest">▶ <span data-i18n="settings.testSound">Nghe thử</span></button><label class="btn" for="ringFile" data-i18n="settings.uploadSound">⬆ Tải MP3</label><input type="file" id="ringFile" accept="audio/*" hidden></div><p class="settings-hint" data-i18n="settings.soundHint">Trên điện thoại, hãy bật âm lượng thiết bị và nghe thử một lần để cho phép trình duyệt phát âm thanh.</p></section>
       <section class="settings-group"><h3 data-i18n="settings.time">Thời gian và vị trí</h3><label class="settings-field"><span data-i18n="settings.timezone">Múi giờ</span><select id="settingsTimezone"><option value="Asia/Ho_Chi_Minh">Asia/Ho_Chi_Minh (UTC+7)</option><option value="Asia/Tokyo">Asia/Tokyo (UTC+9)</option><option value="Europe/London">Europe/London</option><option value="America/New_York">America/New_York</option><option value="UTC">UTC</option></select></label><label class="settings-field"><span data-i18n="settings.location">Tên vị trí hiển thị</span><input id="settingsLocation" maxlength="70" placeholder="Ví dụ: TP. Hồ Chí Minh"></label><label class="settings-field"><span data-i18n="settings.format">Định dạng giờ</span><select id="settingsTimeFormat"><option value="24">24 giờ</option><option value="12">12 giờ (AM/PM)</option></select></label><p class="settings-hint" data-i18n="settings.timeHint">Bạn có thể đổi múi giờ hiển thị; đồng hồ không thay đổi giờ hệ thống của thiết bị.</p><button class="btn main" id="saveSettings" type="button" data-i18n="settings.save">Lưu cài đặt</button></section>
-      <section class="settings-group settings-account"><h3 data-i18n="settings.account">Tài khoản</h3><p class="note" data-i18n="settings.accountCopy">Đăng xuất khỏi phiên quản trị trên thiết bị này.</p><button class="btn" id="settingsLogout" type="button" data-i18n="settings.logout">Đăng xuất quản trị</button></section>
+      <section class="settings-group settings-account"><h3 data-i18n="settings.account">Tài khoản</h3><small id="cloudStatus" class="cloud-status" aria-live="polite"></small><button type="button" class="btn google-sign-out" id="googleSignOut" hidden data-i18n="settings.logout">Đăng xuất</button></section>
     </dialog>
     <div class="dock" id="theme" role="group" aria-label="Theme">
       <div class="dock-items">
@@ -382,7 +381,7 @@
         <h3 class="wide" data-i18n="m.post"></h3><p class="note wide" data-i18n="m.privacy"></p>
         <label class="field wide"><span data-i18n="m.postTitle"></span><input name="title" maxlength="80" required></label>
         <label class="field"><span data-i18n="m.topic"></span><select name="topicId"></select></label>
-        <label class="field"><span data-i18n="m.lang"></span><select name="lang"><option value="vi">Tiếng Việt</option><option value="en">English</option></select></label>
+        <label class="field"><span data-i18n="m.lang"></span><select name="lang"><option value="vi">Tiếng Việt</option><option value="en">English</option><option value="ja">日本語</option></select></label>
         <label class="field wide"><span data-i18n="c.subject"></span><input name="subject" maxlength="150" required></label>
         <label class="field wide"><span data-i18n="c.body"></span><textarea name="body" rows="9" required></textarea></label>
         <label class="field wide"><span data-i18n="m.author"></span><input name="author" maxlength="40"></label>
@@ -397,17 +396,20 @@
         <label class="field"><span data-i18n="a.icon"></span><input name="icon" maxlength="4" required></label><span></span>
         <label class="field"><span data-i18n="a.nameVi"></span><input name="nameVi" required></label>
         <label class="field"><span data-i18n="a.nameEn"></span><input name="nameEn" required></label>
+        <label class="field"><span data-i18n="a.nameJa"></span><input name="nameJa" required></label>
         <label class="field"><span data-i18n="a.subjVi"></span><input name="subjVi" required></label>
         <label class="field"><span data-i18n="a.subjEn"></span><input name="subjEn" required></label>
+        <label class="field"><span data-i18n="a.subjJa"></span><input name="subjJa" required></label>
         <label class="field"><span data-i18n="a.bodyVi"></span><textarea name="bodyVi" rows="9" required></textarea></label>
         <label class="field"><span data-i18n="a.bodyEn"></span><textarea name="bodyEn" rows="9" required></textarea></label>
+        <label class="field"><span data-i18n="a.bodyJa"></span><textarea name="bodyJa" rows="9" required></textarea></label>
         <div class="dlg-actions wide"><button type="button" class="btn" data-close data-i18n="g.cancel"></button><button type="submit" class="btn main" style="width:auto;margin:0" data-i18n="g.save"></button></div>
       </form>
     </dialog>
-    <dialog class="dlg upgrade-dialog" id="upgradeDialog"><div class="upgrade-heading"><div><p class="eyebrow" data-i18n="upgrade.eyebrow">MAILMATE MEMBERSHIP</p><h2 data-i18n="upgrade.title">Chọn không gian viết của bạn</h2><p class="note" data-i18n="upgrade.copy">Bắt đầu miễn phí hoặc chọn gói phù hợp với nhu cầu.</p></div><button type="button" class="btn" id="closeUpgrade" aria-label="Close">✕</button></div><div class="upgrade-plans"><article class="upgrade-plan"><span>STARTER</span><h3>MailMate Free</h3><p class="plan-price">0¥</p><ul><li data-i18n="upgrade.free1">Mẫu email cơ bản</li><li data-i18n="upgrade.free2">Lưu nháp trên trình duyệt</li></ul><button type="button" class="btn plan-choose" data-plan="free" data-i18n="upgrade.freeBtn">Dùng miễn phí</button></article><article class="upgrade-plan featured"><span>EVERYDAY</span><h3>MailMate Go</h3><p class="plan-price">1807¥</p><ul><li data-i18n="upgrade.go1">Quy trình viết mở rộng</li><li data-i18n="upgrade.go2">Hỗ trợ dự án MailMate</li></ul><button type="button" class="btn main plan-choose" data-plan="go" data-i18n="upgrade.goBtn">Chọn Go</button></article><article class="upgrade-plan"><span>ADVANCED</span><h3>MailMate Pro</h3><p class="plan-price">2008¥</p><ul><li data-i18n="upgrade.pro1">Trải nghiệm nâng cao</li><li data-i18n="upgrade.pro2">Ủng hộ phát triển MailMate</li></ul><button type="button" class="btn main plan-choose" data-plan="pro" data-i18n="upgrade.proBtn">Chọn Pro</button></article></div><section class="qr-payment" id="qrPayment" hidden><div class="qr-copy"><span class="qr-pill" data-i18n="upgrade.secure">PAYMENT</span><h3 id="qrTitle">Thanh toán MailMate Pro</h3><p class="note" data-i18n="upgrade.qrCopy">Quét mã QR bằng ứng dụng ngân hàng. Hãy kiểm tra thông tin trước khi xác nhận.</p><strong id="qrAmount">2008¥</strong><p class="note qr-note" data-i18n="upgrade.qrNote">Website chưa tự động xác minh giao dịch. Vui lòng liên hệ quản trị viên sau khi thanh toán.</p></div><div class="qr-frame"><img src="payment-qr.jpg" alt="Mã QR thanh toán Vietcombank" onerror="this.alt='Vui lòng thêm file payment-qr.jpg vào thư mục website';this.style.display='none';this.nextElementSibling.hidden=false"><p hidden>Thêm ảnh payment-qr.jpg cùng thư mục với home.html</p></div></section></dialog>
+    <dialog class="dlg upgrade-dialog" id="upgradeDialog"><div class="upgrade-heading"><div><p class="eyebrow" data-i18n="upgrade.eyebrow">KHABI.MAIL MEMBERSHIP</p><h2 data-i18n="upgrade.title">Chọn không gian viết của bạn</h2><p class="note" data-i18n="upgrade.copy">Bắt đầu miễn phí hoặc chọn gói phù hợp với nhu cầu.</p></div><button type="button" class="btn" id="closeUpgrade" aria-label="Close">✕</button></div><div class="upgrade-plans"><article class="upgrade-plan"><span>STARTER</span><h3>KhaBi.Mail Free</h3><p class="plan-price">0¥</p><ul><li data-i18n="upgrade.free1">Mẫu email cơ bản</li><li data-i18n="upgrade.free2">Lưu nháp trên trình duyệt</li></ul><button type="button" class="btn plan-choose" data-plan="free" data-i18n="upgrade.freeBtn">Dùng miễn phí</button></article><article class="upgrade-plan featured"><span>EVERYDAY</span><h3>KhaBi.Mail Go</h3><p class="plan-price">1807¥</p><ul><li data-i18n="upgrade.go1">Quy trình viết mở rộng</li><li data-i18n="upgrade.go2">Hỗ trợ dự án KhaBi.Mail</li></ul><button type="button" class="btn main plan-choose" data-plan="go" data-i18n="upgrade.goBtn">Chọn Go</button></article><article class="upgrade-plan"><span>ADVANCED</span><h3>KhaBi.Mail Pro</h3><p class="plan-price">2008¥</p><ul><li data-i18n="upgrade.pro1">Trải nghiệm nâng cao</li><li data-i18n="upgrade.pro2">Ủng hộ phát triển KhaBi.Mail</li></ul><button type="button" class="btn main plan-choose" data-plan="pro" data-i18n="upgrade.proBtn">Chọn Pro</button></article></div><section class="qr-payment" id="qrPayment" hidden><div class="qr-copy"><span class="qr-pill" data-i18n="upgrade.secure">PAYMENT</span><h3 id="qrTitle">Thanh toán KhaBi.Mail Pro</h3><p class="note" data-i18n="upgrade.qrCopy">Quét mã QR bằng ứng dụng ngân hàng. Hãy kiểm tra thông tin trước khi xác nhận.</p><strong id="qrAmount">2008¥</strong><p class="note qr-note" data-i18n="upgrade.qrNote">Website chưa tự động xác minh giao dịch. Vui lòng liên hệ quản trị viên sau khi thanh toán.</p></div><div class="qr-frame"><img src="payment-qr.jpg" alt="Mã QR thanh toán Vietcombank" onerror="this.alt='Vui lòng thêm file payment-qr.jpg vào thư mục website';this.style.display='none';this.nextElementSibling.hidden=false"><p hidden>Thêm ảnh payment-qr.jpg cùng thư mục với home.html</p></div></section></dialog>
     <div class="toasts" id="toasts" aria-live="polite"></div>
 
-    <script src="script.js"></script>
-    <script type="module" src="firebase-sync.js"></script>
+    <script src="script.js?v=partner-images-20261007q"></script>
+    <script type="module" src="firebase-sync.js?v=mobile-audit-20261007k"></script>
   </body>
 </html>
